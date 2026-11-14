@@ -6,6 +6,7 @@ concrete OS interaction commands and dispatches them to the ActionDispatcher.
 """
 
 from typing import Dict, Any, Optional
+import config
 from utils.logger import get_logger
 from fusion.action_validator import ActionValidator
 from fusion.conflict_resolver import ConflictResolver
@@ -24,13 +25,32 @@ class IntentRouter:
         if confidence >= 0.5:
             self.dispatcher.dispatch("MOVE_CURSOR", (x_norm, y_norm))
 
-    def route_head_scroll(self, scroll_direction: str, confidence: float):
-        """Routes head pose scroll intentions (SCROLL_UP / SCROLL_DOWN)."""
+    def route_head_scroll(
+        self,
+        scroll_direction: str,
+        confidence: float,
+        pitch: float = 0.0,
+        pitch_velocity: float = 0.0
+    ):
+        """Routes scrolling based on head tilt magnitude and movement speed."""
         valid, _ = self.validator.validate_action(scroll_direction, confidence, source="head")
         if not valid:
             return
 
-        amount = 50 if scroll_direction == "SCROLL_UP" else -50
+        threshold = (
+            abs(config.HEAD_PITCH_SCROLL_UP)
+            if scroll_direction == "SCROLL_UP"
+            else config.HEAD_PITCH_SCROLL_DOWN
+        )
+        excess_degrees = max(0.0, abs(pitch) - threshold)
+        tilt_ratio = min(excess_degrees / config.SCROLL_DEGREES_FOR_MAX, 1.0)
+        velocity_ratio = min(abs(pitch_velocity) / config.SCROLL_VELOCITY_FOR_MAX, 1.0)
+        speed_ratio = max(tilt_ratio, velocity_ratio)
+        magnitude = round(
+            config.SCROLL_MIN_AMOUNT
+            + speed_ratio * (config.SCROLL_MAX_AMOUNT - config.SCROLL_MIN_AMOUNT)
+        )
+        amount = magnitude if scroll_direction == "SCROLL_UP" else -magnitude
         self.dispatcher.dispatch("SCROLL", amount)
 
     def route_gesture_action(self, gesture: str, confidence: float):

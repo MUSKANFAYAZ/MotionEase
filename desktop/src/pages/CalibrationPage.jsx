@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Eye, CheckCircle2, RotateCcw, Play, Sparkles, AlertCircle } from 'lucide-react';
 import { useMotionEase } from '../context/MotionEaseContext';
 import CalibrationTarget from '../components/CalibrationTarget';
@@ -31,6 +31,11 @@ export const CalibrationPage = () => {
 
   const [activeStep, setActiveStep] = useState(0);
   const [samplesInPoint, setSamplesInPoint] = useState(0);
+  const activeStepRef = useRef(0);
+
+  useEffect(() => {
+    activeStepRef.current = activeStep;
+  }, [activeStep]);
 
   // Calibration sequence timer
   useEffect(() => {
@@ -40,8 +45,10 @@ export const CalibrationPage = () => {
         setSamplesInPoint((prev) => {
           if (prev >= 25) {
             // Move to next calibration point
-            if (activeStep < points.length - 1) {
-              const nextStep = activeStep + 1;
+            const currentStep = activeStepRef.current;
+            if (currentStep < points.length - 1) {
+              const nextStep = currentStep + 1;
+              activeStepRef.current = nextStep;
               setActiveStep(nextStep);
               setCalibrationPoint(nextStep);
               return 0;
@@ -62,9 +69,10 @@ export const CalibrationPage = () => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [calibrationState.isCalibrating, activeStep, setCalibrationPoint, completeCalibration]);
+  }, [calibrationState.isCalibrating]);
 
   const handleStart = () => {
+    activeStepRef.current = 0;
     setActiveStep(0);
     setSamplesInPoint(0);
     startCalibration();

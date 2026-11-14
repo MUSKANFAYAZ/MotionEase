@@ -6,6 +6,7 @@ features from Vision (Gaze, Head Pose, Gestures) and Audio (Speech Intents),
 computes cross-modal contextual synergy, and coordinates execution.
 """
 
+import time
 from typing import Dict, Any, Optional
 from utils.logger import get_logger
 from fusion.intent_router import IntentRouter
@@ -31,6 +32,8 @@ class MultimodalFeatureFusion:
             "gesture": {"last_gesture": None, "confidence": 0.0},
             "voice": {"last_command": None, "intent": None}
         }
+        self._previous_pitch = None
+        self._previous_pitch_time = None
 
     def set_modality_status(self, modality: str, enabled: bool):
         """Enables or disables individual input channels."""
@@ -62,7 +65,23 @@ class MultimodalFeatureFusion:
             scroll_action = head_data.get("scroll_action")
             if scroll_action:
                 is_scrolling = True
-                self.router.route_head_scroll(scroll_action, head_data.get("confidence", 0.9))
+                now = time.perf_counter()
+                pitch = head_data.get("pitch", 0.0)
+                pitch_velocity = 0.0
+                if self._previous_pitch is not None and self._previous_pitch_time is not None:
+                    elapsed = max(now - self._previous_pitch_time, 1e-3)
+                    pitch_velocity = (pitch - self._previous_pitch) / elapsed
+                self._previous_pitch = pitch
+                self._previous_pitch_time = now
+                self.router.route_head_scroll(
+                    scroll_action,
+                    head_data.get("confidence", 0.9),
+                    pitch,
+                    pitch_velocity
+                )
+            else:
+                self._previous_pitch = head_data.get("pitch", 0.0)
+                self._previous_pitch_time = time.perf_counter()
 
         # 2. Gaze Pointer Control
         if self.gaze_enabled and gaze_data:

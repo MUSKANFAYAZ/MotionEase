@@ -102,10 +102,10 @@ export const ControlStudioPage = () => {
               <button
                 onClick={calibrateNeutralHead}
                 className="btn-secondary h-8 px-3 rounded-lg text-xs flex items-center gap-1.5 hover:border-cyan-400"
-                title="Recalibrate neutral center head position"
+                title="Pause tracking and save the current head position as neutral"
               >
                 <Compass className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Zero Head Center</span>
+                <span>Recenter Head (Optional)</span>
               </button>
 
               <button

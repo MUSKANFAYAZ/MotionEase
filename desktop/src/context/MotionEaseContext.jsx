@@ -178,13 +178,22 @@ export const MotionEaseProvider = ({ children }) => {
           isCompleted: false
         });
       } else if (data.status === 'completed') {
-        setCalibrationState((prev) => ({
-          ...prev,
-          isCalibrating: false,
-          accuracy: data.result ? data.result.accuracy : 92.5,
-          isCompleted: true
-        }));
-        addToast(`Calibration completed! Accuracy: ${data.result?.accuracy || 92}%`, 'success');
+        if (data.result?.success) {
+          setCalibrationState((prev) => ({
+            ...prev,
+            isCalibrating: false,
+            accuracy: data.result.accuracy,
+            isCompleted: true
+          }));
+          addToast(`Calibration completed! Accuracy: ${data.result.accuracy.toFixed(1)}%`, 'success');
+        } else {
+          setCalibrationState((prev) => ({
+            ...prev,
+            isCalibrating: false,
+            isCompleted: false
+          }));
+          addToast(data.result?.error || 'Calibration failed. Keep your face visible and try again.', 'danger');
+        }
       } else if (data.status === 'reset') {
         setCalibrationState({
           isCalibrating: false,
@@ -267,6 +276,11 @@ export const MotionEaseProvider = ({ children }) => {
   };
 
   const calibrateNeutralHead = () => {
+    if (systemStatus.is_tracking) {
+      wsService.sendCommand('PAUSE_TRACKING');
+      setSystemStatus((prev) => ({ ...prev, is_tracking: false, is_paused: true }));
+      addToast('Tracking paused. Head center saved safely; resume when ready.', 'warning');
+    }
     wsService.sendCommand('CALIBRATE_NEUTRAL_HEAD');
     addToast('Current head posture saved as neutral center', 'success');
   };

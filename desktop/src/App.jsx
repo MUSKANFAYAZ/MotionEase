@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { MotionEaseProvider, useMotionEase } from './context/MotionEaseContext';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
@@ -18,7 +18,19 @@ import AccessibilitySettingsPage from './pages/AccessibilitySettingsPage';
 import TutorialPage from './pages/TutorialPage';
 
 const AppContent = () => {
-  const { currentPage, toasts } = useMotionEase();
+  const { currentPage, toasts, triggerEmergencyStop } = useMotionEase();
+
+  useEffect(() => {
+    const handleEmergencyShortcut = (event) => {
+      if (event.ctrlKey && event.shiftKey && event.code === 'Escape') {
+        event.preventDefault();
+        triggerEmergencyStop();
+      }
+    };
+
+    window.addEventListener('keydown', handleEmergencyShortcut);
+    return () => window.removeEventListener('keydown', handleEmergencyShortcut);
+  }, [triggerEmergencyStop]);
 
   const renderPage = () => {
     switch (currentPage) {
@@ -55,12 +67,14 @@ const AppContent = () => {
       <Sidebar />
 
       {/* Main Content Pane */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col h-screen min-h-0 overflow-hidden">
         {/* Topbar (72px) */}
-        <Topbar />
+        <div className="flex-shrink-0">
+          <Topbar />
+        </div>
 
         {/* Scrollable Viewport (padding: 28px) */}
-        <main className="flex-1 overflow-y-auto p-7 bg-bg-primary">
+        <main className="flex-1 min-h-0 overflow-y-auto p-7 bg-bg-primary">
           {renderPage()}
         </main>
       </div>

@@ -71,6 +71,10 @@ class KalmanFilter2D:
         # Measurement
         z = np.array([[z_x], [z_y]], dtype=np.float64)
         y = z - (self.H @ self.state) # Innovation
+        if np.max(np.abs(y)) > config.KALMAN_MAX_INNOVATION:
+            self.state = np.array([[z_x], [z_y], [0.0], [0.0]], dtype=np.float64)
+            self.P = np.eye(4, dtype=np.float64) * 1.0
+            return z_x, z_y
 
         # Innovation covariance
         S = self.H @ self.P @ self.H.T + self.R

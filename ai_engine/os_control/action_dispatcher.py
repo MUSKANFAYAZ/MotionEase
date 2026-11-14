@@ -33,7 +33,7 @@ class ActionDispatcher:
         self.last_click_time = 0.0
         self.last_scroll_time = 0.0
         self.min_click_interval_sec = 0.25
-        self.min_scroll_interval_sec = 0.05
+        self.min_scroll_interval_sec = config.SCROLL_COOLDOWN_MS / 1000.0
 
     def set_emergency_stop(self, stop: bool):
         """Immediately locks or unlocks all OS input dispatching."""

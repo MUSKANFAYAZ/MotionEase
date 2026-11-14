@@ -376,6 +376,8 @@ class MotionEaseEngine:
             self.fusion.set_modality_status(modality, enabled)
 
         elif cmd == "START_CALIBRATION":
+            self.one_euro.reset()
+            self.kalman.reset()
             self.gaze_tracker.start_calibration()
             self._active_calib_point = config.CALIBRATION_POINTS[0]
             self.ws_server.broadcast({
@@ -400,6 +402,8 @@ class MotionEaseEngine:
 
         elif cmd == "COMPLETE_CALIBRATION":
             res = self.gaze_tracker.complete_calibration()
+            self.one_euro.reset()
+            self.kalman.reset()
             if hasattr(self, "_active_calib_point"):
                 delattr(self, "_active_calib_point")
             self.ws_server.broadcast({
@@ -410,6 +414,8 @@ class MotionEaseEngine:
 
         elif cmd == "RESET_CALIBRATION":
             self.gaze_tracker.reset_calibration()
+            self.one_euro.reset()
+            self.kalman.reset()
             self.ws_server.broadcast({
                 "type": "calibration_event",
                 "status": "reset"
