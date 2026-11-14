@@ -33,6 +33,7 @@ else:
 class MouseController:
     def __init__(self):
         self.screen_width, self.screen_height = pyautogui.size()
+        self._last_position: Tuple[int, int] = pyautogui.position()
         logger.info(f"Screen resolution detected: {self.screen_width}x{self.screen_height}")
 
     def move_to(self, norm_x: float, norm_y: float):
@@ -42,6 +43,13 @@ class MouseController:
         """
         clamped_x = max(0, min(self.screen_width - 1, int(norm_x * self.screen_width)))
         clamped_y = max(0, min(self.screen_height - 1, int(norm_y * self.screen_height)))
+        last_x, last_y = self._last_position
+        if (
+            abs(clamped_x - last_x) < config.CURSOR_DEADBAND_PIXELS
+            and abs(clamped_y - last_y) < config.CURSOR_DEADBAND_PIXELS
+        ):
+            return
+        self._last_position = (clamped_x, clamped_y)
 
         if _user32:
             try:

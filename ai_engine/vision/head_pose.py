@@ -50,6 +50,8 @@ class HeadPoseEstimator:
         self.neutral_yaw: float = 0.0
         self.neutral_roll: float = 0.0
         self.is_calibrated: bool = False
+        self._active_scroll_action: Optional[str] = None
+        self._auto_calibration_samples = []
 
     def calibrate_neutral(self, pitch: float, yaw: float, roll: float):
         """Sets the current head pose as the neutral reference baseline."""
@@ -57,6 +59,8 @@ class HeadPoseEstimator:
         self.neutral_yaw = yaw
         self.neutral_roll = roll
         self.is_calibrated = True
+        self._active_scroll_action = None
+        self._auto_calibration_samples = []
         logger.info(f"Neutral head pose calibrated: Pitch={pitch:.1f}, Yaw={yaw:.1f}, Roll={roll:.1f}")
 
     def reset_neutral(self):
@@ -65,6 +69,8 @@ class HeadPoseEstimator:
         self.neutral_yaw = 0.0
         self.neutral_roll = 0.0
         self.is_calibrated = False
+        self._active_scroll_action = None
+        self._auto_calibration_samples = []
 
     def estimate_pose(self, landmarks_px: list, frame_shape: Tuple[int, int]) -> Dict[str, Any]:
         """
@@ -140,6 +146,30 @@ class HeadPoseEstimator:
         yaw_deg = math.degrees(yaw)
         roll_deg = math.degrees(roll)
 
+        if not self.is_calibrated:
+            self._auto_calibration_samples.append((pitch_deg, yaw_deg, roll_deg))
+            if len(self._auto_calibration_samples) < config.HEAD_AUTO_CALIBRATION_FRAMES:
+                return {
+                    "valid": True,
+                    "yaw": 0.0,
+                    "pitch": 0.0,
+                    "roll": 0.0,
+                    "raw_pitch": round(pitch_deg, 2),
+                    "raw_yaw": round(yaw_deg, 2),
+                    "raw_roll": round(roll_deg, 2),
+                    "direction": "neutral",
+                    "scroll_action": None,
+                    "confidence": 0.92
+                }
+
+            baseline = np.mean(self._auto_calibration_samples, axis=0)
+            self.neutral_pitch = float(baseline[0])
+            self.neutral_yaw = float(baseline[1])
+            self.neutral_roll = float(baseline[2])
+            self.is_calibrated = True
+            self._auto_calibration_samples = []
+            logger.info("Head pose neutral automatically calibrated from initial stable frames.")
+
         # Adjust for neutral calibration
         rel_pitch = pitch_deg - self.neutral_pitch
         rel_yaw = yaw_deg - self.neutral_yaw
@@ -149,10 +179,21 @@ class HeadPoseEstimator:
         direction = "neutral"
         scroll_action = None
 
-        if rel_pitch < config.HEAD_PITCH_SCROLL_UP:
+        if self._active_scroll_action == "SCROLL_UP":
+            if rel_pitch > config.HEAD_PITCH_SCROLL_UP_RELEASE:
+                self._active_scroll_action = None
+        elif self._active_scroll_action == "SCROLL_DOWN":
+            if rel_pitch < config.HEAD_PITCH_SCROLL_DOWN_RELEASE:
+                self._active_scroll_action = None
+        elif rel_pitch < config.HEAD_PITCH_SCROLL_UP:
+            self._active_scroll_action = "SCROLL_UP"
+        elif rel_pitch > config.HEAD_PITCH_SCROLL_DOWN:
+            self._active_scroll_action = "SCROLL_DOWN"
+
+        if self._active_scroll_action == "SCROLL_UP":
             direction = "up"
             scroll_action = "SCROLL_UP"
-        elif rel_pitch > config.HEAD_PITCH_SCROLL_DOWN:
+        elif self._active_scroll_action == "SCROLL_DOWN":
             direction = "down"
             scroll_action = "SCROLL_DOWN"
         elif rel_yaw > config.HEAD_YAW_THRESHOLD:

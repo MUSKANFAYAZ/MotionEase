@@ -64,21 +64,10 @@ class CameraManager:
                 self.camera_index = camera_index
 
             logger.info(f"Opening camera index {self.camera_index}...")
-            # Try standard camera backends
-            self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_MSMF)
-            if not self.cap or not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(self.camera_index)
-            if not self.cap or not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
-            
-            if not self.cap or not self.cap.isOpened():
+            self.cap = self._open_capture()
+            if self.cap is None:
                 logger.error(f"Failed to open camera index {self.camera_index}")
-                self.cap = None
                 return False
-
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
-            self.cap.set(cv2.CAP_PROP_FPS, config.TARGET_FPS)
 
             self.is_running = True
             self._thread = threading.Thread(target=self._capture_loop, daemon=True)
@@ -86,20 +75,61 @@ class CameraManager:
             logger.info(f"Camera {self.camera_index} started successfully.")
             return True
 
+    def _open_capture(self) -> Optional[cv2.VideoCapture]:
+        """Open a camera backend only after confirming it can return a frame."""
+        backends = (cv2.CAP_MSMF, cv2.CAP_DSHOW, cv2.CAP_ANY)
+        for backend in backends:
+            cap = cv2.VideoCapture(self.camera_index, backend)
+            if not cap.isOpened():
+                cap.release()
+                continue
+
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+            cap.set(cv2.CAP_PROP_FPS, config.TARGET_FPS)
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                return cap
+
+            cap.release()
+            time.sleep(0.25)
+
+        return None
+
+    def _reconnect(self) -> bool:
+        """Release a stale capture handle and try opening the camera again."""
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
+        time.sleep(0.5)
+        self.cap = self._open_capture()
+        return self.cap is not None
+
     def _capture_loop(self):
         """Continuously captures frames and updates timestamp."""
+        consecutive_failures = 0
         while self.is_running:
             if not self.cap or not self.cap.isOpened():
                 logger.warning("Camera connection lost. Attempting reconnection...")
+                self._reconnect()
                 time.sleep(1.0)
                 continue
 
             ret, frame = self.cap.read()
             if not ret or frame is None:
-                logger.warning("Failed to grab frame from camera.")
-                time.sleep(0.01)
+                consecutive_failures += 1
+                if consecutive_failures == 1:
+                    logger.warning("Failed to grab frame from camera; retrying...")
+                if consecutive_failures >= 10:
+                    logger.warning("Camera is not returning frames. Reopening capture...")
+                    self._reconnect()
+                    consecutive_failures = 0
+                    time.sleep(1.0)
+                else:
+                    time.sleep(0.05)
                 continue
 
+            consecutive_failures = 0
             now = time.perf_counter()
             with self.lock:
                 self.latest_frame = frame

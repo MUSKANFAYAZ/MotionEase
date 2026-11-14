@@ -12,10 +12,10 @@
 > **Department:** Computer Science and Engineering  
 > **Project Guide:** Brunda S | **HOD:** Dr. Anil Kumar K.M  
 > **Team Members:**  
-> - Muskan (`02JST23CS069`)  
-> - Veekshitha K (`02JST23CS123`)  
-> - Mohammed Akhil Ali (`01JST23CS078`)  
-> - Yashas C (`01JST24CS416`)  
+> - Muskan 
+> - Veekshitha K 
+> - Mohammed Akhil Ali 
+> - Yashas C 
 
 ---
 
