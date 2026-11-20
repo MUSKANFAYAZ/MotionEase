@@ -24,6 +24,15 @@ class GazeTracker:
         self.calibration_file = calibration_file
         self.is_calibrated = False
 
+        # Direction and Sensitivity Configuration
+        self.invert_x = config.INVERT_CURSOR_X
+        self.invert_y = config.INVERT_CURSOR_Y
+        self.sensitivity = config.CURSOR_SENSITIVITY
+
+        # Landmark pre-smoothing state (eliminates landmark-level vibration)
+        self._smooth_face_x: Optional[float] = None
+        self._smooth_face_y: Optional[float] = None
+
         # Polynomial regression models for X and Y screen mapping
         self.poly_degree = 2
         self.poly_transformer = PolynomialFeatures(degree=self.poly_degree)
@@ -37,6 +46,23 @@ class GazeTracker:
 
         # Load existing calibration if present
         self.load_calibration()
+
+    def update_settings(
+        self,
+        invert_x: Optional[bool] = None,
+        invert_y: Optional[bool] = None,
+        sensitivity: Optional[float] = None
+    ):
+        """Dynamically applies runtime sensitivity and axis inversion settings."""
+        if invert_x is not None:
+            self.invert_x = bool(invert_x)
+            logger.info(f"GazeTracker Invert X set to: {self.invert_x}")
+        if invert_y is not None:
+            self.invert_y = bool(invert_y)
+            logger.info(f"GazeTracker Invert Y set to: {self.invert_y}")
+        if sensitivity is not None:
+            self.sensitivity = max(0.2, min(3.0, float(sensitivity)))
+            logger.info(f"GazeTracker Sensitivity set to: {self.sensitivity:.2f}x")
 
     def get_relative_iris_features(
         self,
@@ -89,6 +115,7 @@ class GazeTracker:
         """
         Calculates screen gaze coordinates (0.0 to 1.0 normalized).
         Uses polynomial regression if calibrated; otherwise combines face posture & iris deflection.
+        Applies directional inversion and sensitivity gain.
         """
         lx, ly, rx, ry = self.get_relative_iris_features(landmarks_norm, left_iris, right_iris)
         
@@ -99,12 +126,22 @@ class GazeTracker:
         # Extract face center position (nose tip landmark 1)
         if landmarks_norm and len(landmarks_norm) > 1:
             nose = landmarks_norm[1]
-            # Mirrored webcam: moving head right means looking right
-            face_x = 1.0 - nose[0]
-            face_y = nose[1]
+            raw_face_x = nose[0]
+            raw_face_y = nose[1]
         else:
-            face_x = 0.5
-            face_y = 0.5
+            raw_face_x = 0.5
+            raw_face_y = 0.5
+
+        # Pre-smooth face anchor with exponential moving average to filter landmark noise
+        if self._smooth_face_x is None:
+            self._smooth_face_x = raw_face_x
+            self._smooth_face_y = raw_face_y
+        else:
+            self._smooth_face_x = 0.35 * raw_face_x + 0.65 * self._smooth_face_x
+            self._smooth_face_y = 0.35 * raw_face_y + 0.65 * self._smooth_face_y
+
+        face_x = self._smooth_face_x
+        face_y = self._smooth_face_y
 
         if self.is_calibrated and self.model_x and self.model_y:
             try:
@@ -125,7 +162,7 @@ class GazeTracker:
                 mode = "fallback_linear"
         else:
             # Active heuristic: combines head orientation (macro) and iris gaze (micro)
-            # Smooth non-linear curve prevents micro-tremor around center while allowing easy edge reach
+            # Center baseline is 0.5
             dx = face_x - 0.5
             dy = face_y - 0.5
 
@@ -139,12 +176,36 @@ class GazeTracker:
             macro_x = 0.5 + _smooth_gain(dx)
             macro_y = 0.5 + _smooth_gain(dy)
 
-            # Subtle micro iris deflection (scaled down to eliminate rapid flutter)
-            micro_x = (avg_rel_x - 0.5) * 0.35
-            micro_y = (avg_rel_y - 0.5) * 0.35
+            # Deadband small iris micro-flutter to eliminate high-frequency ocular jitter
+            iris_dx = avg_rel_x - 0.5
+            iris_dy = avg_rel_y - 0.5
+            if abs(iris_dx) < 0.035:
+                micro_x = 0.0
+            else:
+                effective_dx = iris_dx - (0.035 if iris_dx > 0 else -0.035)
+                micro_x = effective_dx * 0.25
 
-            screen_x = clamp(macro_x + micro_x, 0.0, 1.0)
-            screen_y = clamp(macro_y + micro_y, 0.0, 1.0)
+            if abs(iris_dy) < 0.035:
+                micro_y = 0.0
+            else:
+                effective_dy = iris_dy - (0.035 if iris_dy > 0 else -0.035)
+                micro_y = effective_dy * 0.25
+
+            raw_screen_x = clamp(macro_x + micro_x, 0.0, 1.0)
+            raw_screen_y = clamp(macro_y + micro_y, 0.0, 1.0)
+
+            # Apply sensitivity multiplier around center
+            screen_x = 0.5 + (raw_screen_x - 0.5) * self.sensitivity
+            screen_y = 0.5 + (raw_screen_y - 0.5) * self.sensitivity
+
+            # Directional inversion based on user preference
+            if self.invert_x:
+                screen_x = 1.0 - screen_x
+            if self.invert_y:
+                screen_y = 1.0 - screen_y
+
+            screen_x = clamp(screen_x, 0.0, 1.0)
+            screen_y = clamp(screen_y, 0.0, 1.0)
             confidence = 0.88
             mode = "uncalibrated_heuristic"
 
@@ -158,7 +219,10 @@ class GazeTracker:
             },
             "confidence": confidence,
             "mode": mode,
-            "is_calibrated": self.is_calibrated
+            "is_calibrated": self.is_calibrated,
+            "invert_x": self.invert_x,
+            "invert_y": self.invert_y,
+            "sensitivity": self.sensitivity
         }
 
     # 9-Point Calibration Pipeline
@@ -167,6 +231,8 @@ class GazeTracker:
         self.is_calibrating = True
         self.calibration_samples = []
         self.current_point_index = 0
+        self._smooth_face_x = None
+        self._smooth_face_y = None
         logger.info("Started 9-point eye gaze calibration.")
 
     def add_calibration_sample(
@@ -284,6 +350,8 @@ class GazeTracker:
         self.is_calibrated = False
         self.model_x = None
         self.model_y = None
+        self._smooth_face_x = None
+        self._smooth_face_y = None
         if os.path.exists(self.calibration_file):
             try:
                 os.remove(self.calibration_file)

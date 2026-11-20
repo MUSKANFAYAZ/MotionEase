@@ -13,7 +13,9 @@ import {
   Activity,
   Layers,
   MousePointer,
-  Keyboard
+  Keyboard,
+  Zap,
+  Gauge
 } from 'lucide-react';
 import { useMotionEase } from '../context/MotionEaseContext';
 import WebcamPreview from '../components/WebcamPreview';
@@ -28,6 +30,8 @@ export const ControlStudioPage = () => {
     systemStatus,
     modalities,
     actionLog,
+    settings,
+    updateSettings,
     startTracking,
     pauseTracking,
     triggerEmergencyStop,
@@ -165,6 +169,130 @@ export const ControlStudioPage = () => {
 
         {/* Right Column: Telemetry Breakdown & Action Stream (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
+          {/* Real-time Cursor, Speed, Direction & Jitter Control Card */}
+          <div className="bg-surface-primary border border-accent-primary/30 rounded-2xl p-4 space-y-3.5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs uppercase font-bold text-accent-secondary tracking-wider flex items-center gap-1.5">
+                <Gauge className="w-4 h-4 text-accent-secondary" />
+                Live Cursor & Jitter Controls
+              </h4>
+              <button
+                onClick={() => setCurrentPage('settings')}
+                className="text-[11px] text-txt-muted hover:text-cyan-400 underline"
+              >
+                All Settings
+              </button>
+            </div>
+
+            {/* Horizontal Direction Invert Toggle */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-txt-muted block">
+                Horizontal Direction (Left ↔ Right)
+              </label>
+              <button
+                type="button"
+                onClick={() => updateSettings({ invert_x: !settings.invert_x })}
+                className={`w-full p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all ${
+                  settings.invert_x
+                    ? 'border-cyan-500/60 bg-cyan-950/30 text-cyan-300'
+                    : 'border-amber-500/60 bg-amber-950/30 text-amber-300'
+                }`}
+                title="Click to flip horizontal cursor direction"
+              >
+                <div className="flex items-center gap-2">
+                  <Compass className="w-4 h-4" />
+                  <span>
+                    {settings.invert_x
+                      ? 'Looking Right → Moves Right (Inverted)'
+                      : 'Looking Right → Moves Left (Raw)'}
+                  </span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-surface-primary border border-border-color font-mono uppercase">
+                  Click to Flip
+                </span>
+              </button>
+            </div>
+
+            {/* Speed / Sensitivity Controls */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-txt-muted font-medium">Cursor Speed (Gain):</span>
+                <span className="font-mono font-bold text-accent-secondary">{settings.cursor_speed.toFixed(1)}x</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                {[
+                  { label: 'Slow (0.6x)', val: 0.6 },
+                  { label: 'Normal (1.0x)', val: 1.0 },
+                  { label: 'Fast (1.5x)', val: 1.5 }
+                ].map((btn) => (
+                  <button
+                    key={btn.label}
+                    type="button"
+                    onClick={() => updateSettings({ cursor_speed: btn.val })}
+                    className={`py-1.5 px-2 rounded-lg border text-center font-medium transition-all ${
+                      Math.abs(settings.cursor_speed - btn.val) < 0.15
+                        ? 'border-accent-primary bg-accent-primary/20 text-cyan-300 font-bold'
+                        : 'border-border-color bg-surface-secondary text-txt-muted hover:border-border-color/80'
+                    }`}
+                  >
+                    {btn.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Jitter Fixation Deadband */}
+            <div className="space-y-1.5 pt-1 border-t border-border-color/50">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-txt-muted font-medium">Jitter Suppression (Deadband):</span>
+                <span className="font-mono font-bold text-emerald-400">{settings.deadband_px} px</span>
+              </div>
+              <input
+                type="range"
+                min={3}
+                max={20}
+                step={1}
+                value={settings.deadband_px}
+                onChange={(e) => updateSettings({ deadband_px: Number(e.target.value) })}
+                className="w-full accent-emerald-400 cursor-pointer h-1.5 rounded-lg bg-surface-secondary"
+              />
+              <div className="flex justify-between text-[10px] text-txt-muted font-mono">
+                <span>More Responsive (3px)</span>
+                <span>Zero Jitter / Rock Solid (20px)</span>
+              </div>
+            </div>
+
+            {/* Update Frequency Toggle */}
+            <div className="flex items-center justify-between pt-1 border-t border-border-color/50 text-xs">
+              <span className="text-txt-muted font-medium">Cursor Frequency:</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => updateSettings({ cursor_rate_hz: 30 })}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-all ${
+                    settings.cursor_rate_hz === 30
+                      ? 'border-accent-primary bg-accent-primary/20 text-cyan-300 font-bold'
+                      : 'border-border-color bg-surface-secondary text-txt-muted'
+                  }`}
+                >
+                  30 Hz
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateSettings({ cursor_rate_hz: 60 })}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-all flex items-center gap-1 ${
+                    settings.cursor_rate_hz === 60
+                      ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300 font-bold'
+                      : 'border-border-color bg-surface-secondary text-txt-muted'
+                  }`}
+                >
+                  <Zap className="w-3 h-3 text-emerald-400" />
+                  <span>60 Hz Ultra</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Tracking Telemetry Inspection Card */}
           <div className="bg-surface-primary border border-border-color rounded-2xl p-4 space-y-3">
             <h4 className="text-xs uppercase font-bold text-txt-muted tracking-wider flex items-center gap-1.5">
@@ -232,7 +360,7 @@ export const ControlStudioPage = () => {
           </div>
 
           {/* Real-Time Action Log */}
-          <ActionLog actions={actionLog} maxHeight="280px" />
+          <ActionLog actions={actionLog} maxHeight="240px" />
         </div>
       </div>
     </div>

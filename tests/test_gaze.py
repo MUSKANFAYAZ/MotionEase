@@ -45,5 +45,15 @@ class TestGazeTracker(unittest.TestCase):
         self.assertTrue(self.tracker.is_calibrated)
         print(f"9-Point Calibration Training completed: Accuracy={res['accuracy']}%")
 
+    def test_direction_inversion_and_sensitivity(self):
+        self.tracker.update_settings(invert_x=True, invert_y=False, sensitivity=1.5)
+        self.assertTrue(self.tracker.invert_x)
+        self.assertFalse(self.tracker.invert_y)
+        self.assertEqual(self.tracker.sensitivity, 1.5)
+
+        # Flip invert_x
+        self.tracker.update_settings(invert_x=False)
+        self.assertFalse(self.tracker.invert_x)
+
 if __name__ == "__main__":
     unittest.main()

@@ -48,15 +48,21 @@ CALIBRATION_POINTS = [
 ]
 SAMPLES_PER_CALIBRATION_POINT = 30
 
+# Cursor Direction & Dynamic Speed Controls
+INVERT_CURSOR_X = True          # Invert horizontal axis so looking right moves right
+INVERT_CURSOR_Y = False         # Normal vertical axis
+CURSOR_SENSITIVITY = 1.0        # Default speed multiplier (0.5x = slow, 1.0x = normal, 2.0x = fast)
+CURSOR_DEADBAND_PIXELS = 8      # Pixels of stationary deadband to eliminate micro-jitter
+CURSOR_UPDATE_RATE_HZ = 60      # Frequency of high-rate cursor interpolation (30 or 60 Hz)
+
 # Signal Filtering: One-Euro Filter Parameters
-ONE_EURO_MIN_CUTOFF = 0.35      # Minimum cutoff frequency in Hz (0.35 Hz for stable fixation)
-ONE_EURO_BETA = 0.015           # Speed coefficient (adaptive responsiveness during movement)
+ONE_EURO_MIN_CUTOFF = 0.25      # Lower cutoff frequency (0.25 Hz for rock-solid stationary fixation)
+ONE_EURO_BETA = 0.012           # Speed coefficient (adaptive responsiveness during fast movement)
 ONE_EURO_DCUTOFF = 1.0          # Derivative cutoff frequency
 
 # Kalman Filter Parameters
 KALMAN_PROCESS_NOISE = 1e-4
 KALMAN_MEASUREMENT_NOISE = 1e-2
-CURSOR_DEADBAND_PIXELS = 5
 KALMAN_MAX_INNOVATION = 0.2
 
 # Dynamic Dwell Scaling

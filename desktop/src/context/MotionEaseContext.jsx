@@ -10,6 +10,31 @@ export const MotionEaseProvider = ({ children }) => {
   // Navigation active page
   const [currentPage, setCurrentPage] = useState('landing'); // 'landing' | 'setup' | 'dashboard' | 'studio' | 'calibration' | 'gestures' | 'voice' | 'keyboard' | 'slm' | 'settings' | 'tutorial'
 
+  // Dynamic Cursor & Filter Settings
+  const [settings, setSettings] = useState(() => {
+    const defaults = {
+      invert_x: true,
+      invert_y: false,
+      cursor_speed: 1.0,
+      deadband_px: 8,
+      cursor_rate_hz: 60,
+      min_cutoff: 0.25,
+      beta: 0.012,
+      min_dwell_ms: 600,
+      max_dwell_ms: 1500,
+      dwell_radius_px: 35
+    };
+    try {
+      const saved = localStorage.getItem('motionease_settings');
+      if (saved) {
+        return { ...defaults, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved settings:', e);
+    }
+    return defaults;
+  });
+
   // Real-Time Telemetry
   const [telemetry, setTelemetry] = useState({
     face_detected: false,
@@ -85,6 +110,35 @@ export const MotionEaseProvider = ({ children }) => {
     }, 4000);
   }, []);
 
+  // Update Settings Dispatcher
+  const updateSettings = useCallback((newSettings) => {
+    setSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      try {
+        localStorage.setItem('motionease_settings', JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+
+      // Dispatch payload to Python backend
+      const payload = {
+        invert_x: updated.invert_x,
+        invert_y: updated.invert_y,
+        cursor_speed: updated.cursor_speed,
+        deadband_px: updated.deadband_px,
+        cursor_rate_hz: updated.cursor_rate_hz,
+        one_euro: { min_cutoff: updated.min_cutoff, beta: updated.beta },
+        dwell: {
+          min_dwell_ms: updated.min_dwell_ms,
+          max_dwell_ms: updated.max_dwell_ms,
+          radius_px: updated.dwell_radius_px
+        }
+      };
+      wsService.sendCommand('UPDATE_SETTINGS', payload);
+      return updated;
+    });
+  }, []);
+
   // Command Methods
   const startTracking = useCallback(() => {
     wsService.sendCommand('START_TRACKING');
@@ -127,6 +181,22 @@ export const MotionEaseProvider = ({ children }) => {
       setIsConnected(data.connected);
       if (data.connected) {
         addToast('Connected to MotionEase AI Engine', 'success');
+        // Push initial preferences to backend
+        try {
+          const saved = localStorage.getItem('motionease_settings');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            wsService.sendCommand('UPDATE_SETTINGS', {
+              invert_x: parsed.invert_x,
+              invert_y: parsed.invert_y,
+              cursor_speed: parsed.cursor_speed,
+              deadband_px: parsed.deadband_px,
+              cursor_rate_hz: parsed.cursor_rate_hz,
+              one_euro: { min_cutoff: parsed.min_cutoff, beta: parsed.beta },
+              dwell: { min_dwell_ms: parsed.min_dwell_ms, max_dwell_ms: parsed.max_dwell_ms, radius_px: parsed.dwell_radius_px }
+            });
+          }
+        } catch (e) {}
       } else {
         addToast('Connection to AI Engine lost. Retrying...', 'warning');
       }
@@ -168,6 +238,9 @@ export const MotionEaseProvider = ({ children }) => {
       }));
       if (data.recent_actions && data.recent_actions.length > 0) {
         setActionLog(data.recent_actions);
+      }
+      if (data.settings) {
+        setSettings((prev) => ({ ...prev, ...data.settings }));
       }
     });
 
@@ -374,17 +447,14 @@ export const MotionEaseProvider = ({ children }) => {
     wsService.sendCommand('TEST_VOICE_COMMAND', { text });
   };
 
-  const updateSettings = (settings) => {
-    wsService.sendCommand('UPDATE_SETTINGS', settings);
-    addToast('Accessibility settings applied', 'success');
-  };
-
   return (
     <MotionEaseContext.Provider
       value={{
         isConnected,
         currentPage,
         setCurrentPage,
+        settings,
+        updateSettings,
         telemetry,
         systemStatus,
         modalities,
@@ -408,8 +478,7 @@ export const MotionEaseProvider = ({ children }) => {
         virtualKeyboardPress,
         virtualKeyboardSuggestion,
         virtualKeyboardClear,
-        testVoiceCommand,
-        updateSettings
+        testVoiceCommand
       }}
     >
       {children}

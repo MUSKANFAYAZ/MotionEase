@@ -40,12 +40,19 @@ class MouseController:
         self.screen_width, self.screen_height = pyautogui.size()
         self._last_position: Tuple[int, int] = pyautogui.position()
         self._last_ai_pos: Optional[Tuple[int, int]] = None
+        self.deadband_px = config.CURSOR_DEADBAND_PIXELS
         
         # Human-Touch-to-Yield State
         self.human_yield_until: float = 0.0
         self._last_yield_log_time: float = 0.0
         
         logger.info(f"Screen resolution detected: {self.screen_width}x{self.screen_height}")
+
+    def update_settings(self, deadband_px: Optional[int] = None):
+        """Dynamically updates fixation deadband to adjust jitter vs precision."""
+        if deadband_px is not None:
+            self.deadband_px = max(2, min(30, int(deadband_px)))
+            logger.info(f"MouseController deadband updated: {self.deadband_px}px")
 
     def get_position(self) -> Tuple[int, int]:
         """Returns current OS cursor position in pixels using fastest available API."""
@@ -103,10 +110,10 @@ class MouseController:
         clamped_x = max(0, min(self.screen_width - 1, int(norm_x * self.screen_width)))
         clamped_y = max(0, min(self.screen_height - 1, int(norm_y * self.screen_height)))
 
-        # 5. Deadband filtering: do not move if delta is below threshold
+        # 5. Fixation deadband: do not move if delta is below threshold (kills jitter during fixation)
         last_x, last_y = self._last_position
         dist_from_last = math.hypot(clamped_x - last_x, clamped_y - last_y)
-        if dist_from_last < config.CURSOR_DEADBAND_PIXELS:
+        if dist_from_last < self.deadband_px:
             return
 
         self._last_position = (clamped_x, clamped_y)

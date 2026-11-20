@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Sliders, MousePointer, Clock, Eye, ShieldCheck, RotateCcw, Save } from 'lucide-react';
+import React from 'react';
+import { Sliders, MousePointer, Clock, Eye, ShieldCheck, RotateCcw, Save, Zap, Compass } from 'lucide-react';
 import { useMotionEase } from '../context/MotionEaseContext';
 import SettingsCard from '../components/SettingsCard';
 import SliderControl from '../components/SliderControl';
@@ -8,71 +8,29 @@ import StatusBadge from '../components/StatusBadge';
 import PageHeader from '../components/PageHeader';
 
 export const AccessibilitySettingsPage = () => {
-  const { updateSettings, resetCalibration, addToast } = useMotionEase();
-
-  // One-Euro Filter Tuning
-  const [minCutoff, setMinCutoff] = useState(1.0);
-  const [beta, setBeta] = useState(0.05);
-
-  // Dynamic Dwell Scaling
-  const [minDwellMs, setMinDwellMs] = useState(600);
-  const [maxDwellMs, setMaxDwellMs] = useState(1500);
-  const [dwellRadiusPx, setDwellRadiusPx] = useState(35);
-
-  // UI Visual Settings
-  const [highContrast, setHighContrast] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  // Load from localStorage if present
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('motionease_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.minCutoff) setMinCutoff(parsed.minCutoff);
-        if (parsed.beta) setBeta(parsed.beta);
-        if (parsed.minDwellMs) setMinDwellMs(parsed.minDwellMs);
-        if (parsed.dwellRadiusPx) setDwellRadiusPx(parsed.dwellRadiusPx);
-        if (parsed.highContrast !== undefined) setHighContrast(parsed.highContrast);
-        if (parsed.reducedMotion !== undefined) setReducedMotion(parsed.reducedMotion);
-      }
-    } catch (e) {
-      console.warn('Could not read saved settings:', e);
-    }
-  }, []);
-
-  const handleSave = () => {
-    const settings = {
-      one_euro: { min_cutoff: minCutoff, beta: beta },
-      dwell: { min_dwell_ms: minDwellMs, max_dwell_ms: maxDwellMs, radius_px: dwellRadiusPx },
-      ui: { highContrast, reducedMotion }
-    };
-    try {
-      localStorage.setItem('motionease_settings', JSON.stringify({
-        minCutoff, beta, minDwellMs, maxDwellMs, dwellRadiusPx, highContrast, reducedMotion
-      }));
-    } catch (e) {
-      console.error(e);
-    }
-    updateSettings(settings);
-  };
+  const { settings, updateSettings, resetCalibration, addToast } = useMotionEase();
 
   const handleResetDefaults = () => {
-    setMinCutoff(1.0);
-    setBeta(0.05);
-    setMinDwellMs(600);
-    setMaxDwellMs(1500);
-    setDwellRadiusPx(35);
-    setHighContrast(false);
-    setReducedMotion(false);
-    addToast('Reset to default values', 'info');
+    updateSettings({
+      invert_x: true,
+      invert_y: false,
+      cursor_speed: 1.0,
+      deadband_px: 8,
+      cursor_rate_hz: 60,
+      min_cutoff: 0.25,
+      beta: 0.012,
+      min_dwell_ms: 600,
+      max_dwell_ms: 1500,
+      dwell_radius_px: 35
+    });
+    addToast('Settings reset to optimized defaults', 'info');
   };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <PageHeader
         title="Accessibility & Filter Calibration"
-        subtitle="Fine-tune cursor filtering algorithms, dwell-time thresholds, and privacy preferences."
+        subtitle="Fine-tune cursor direction, tracking frequency, jitter damping, and dwell thresholds."
         badge={<StatusBadge status="active" text="Settings Synchronized" />}
         actionButton={
           <div className="flex items-center gap-2">
@@ -81,46 +39,130 @@ export const AccessibilitySettingsPage = () => {
               className="btn-secondary h-9 px-3 text-xs flex items-center gap-1.5"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Defaults</span>
-            </button>
-            <button
-              onClick={handleSave}
-              className="btn-primary h-9 px-4 text-xs flex items-center gap-1.5 shadow-glow"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>Save & Apply</span>
+              <span>Reset Defaults</span>
             </button>
           </div>
         }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Speed-Gain Adaptive One-Euro Signal Filter */}
+        {/* Pointer Movement & Direction Tuning */}
         <SettingsCard
-          title="Speed-Gain Adaptive 1€ Signal Filter"
+          title="Pointer Movement & Direction"
+          description="Adjust axis orientation and cursor speed response to match user posture."
+          icon={Compass}
+        >
+          <div className="flex items-center justify-between pt-1">
+            <div>
+              <div className="text-sm font-medium text-txt-primary">Invert Horizontal Axis (X)</div>
+              <p className="text-[11px] text-txt-muted">
+                {settings.invert_x
+                  ? 'Active: Looking Right moves cursor Right (Mirrored Mode)'
+                  : 'Disabled: Raw camera orientation'}
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={settings.invert_x}
+              onChange={(val) => updateSettings({ invert_x: val })}
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <div>
+              <div className="text-sm font-medium text-txt-primary">Invert Vertical Axis (Y)</div>
+              <p className="text-[11px] text-txt-muted">Looking Down moves cursor Down.</p>
+            </div>
+            <ToggleSwitch
+              checked={settings.invert_y}
+              onChange={(val) => updateSettings({ invert_y: val })}
+            />
+          </div>
+
+          <SliderControl
+            label="Cursor Speed / Sensitivity"
+            value={settings.cursor_speed}
+            min={0.4}
+            max={2.5}
+            step={0.1}
+            unit="x"
+            onChange={(val) => updateSettings({ cursor_speed: val })}
+            helperText="0.6x is slow precision mode, 1.0x is balanced, 1.8x allows reaching screen edges with less head movement."
+          />
+
+          <div className="pt-2">
+            <label className="text-xs font-semibold text-txt-muted block mb-2">
+              Cursor Update Frequency (Rate)
+            </label>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => updateSettings({ cursor_rate_hz: 30 })}
+                className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
+                  settings.cursor_rate_hz === 30
+                    ? 'border-accent-primary bg-accent-primary/20 text-cyan-300 shadow-sm'
+                    : 'border-border-color bg-surface-secondary text-txt-muted hover:border-border-color/80'
+                }`}
+              >
+                <div className="font-bold">30 Hz</div>
+                <div className="text-[10px] opacity-75">Standard (Low CPU)</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => updateSettings({ cursor_rate_hz: 60 })}
+                className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
+                  settings.cursor_rate_hz === 60
+                    ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300 shadow-sm'
+                    : 'border-border-color bg-surface-secondary text-txt-muted hover:border-border-color/80'
+                }`}
+              >
+                <div className="font-bold flex items-center justify-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>60 Hz</span>
+                </div>
+                <div className="text-[10px] opacity-75">Ultra-Smooth (60 FPS)</div>
+              </button>
+            </div>
+          </div>
+        </SettingsCard>
+
+        {/* Jitter Elimination & Signal Filtering */}
+        <SettingsCard
+          title="Jitter Elimination & Filtering"
           description="Eradicates high-frequency micro-tremors during fixation while eliminating lag during fast saccades."
           icon={Sliders}
         >
           <SliderControl
+            label="Fixation Deadband (Jitter Killer)"
+            value={settings.deadband_px}
+            min={2}
+            max={20}
+            step={1}
+            unit="px"
+            onChange={(val) => updateSettings({ deadband_px: val })}
+            helperText="Higher values freeze the cursor rock-solid during eye fixation. Default: 8px."
+          />
+
+          <SliderControl
             label="Minimum Cutoff Frequency (Min Cutoff)"
-            value={minCutoff}
+            value={settings.min_cutoff}
             min={0.1}
-            max={3.0}
-            step={0.1}
+            max={1.5}
+            step={0.05}
             unit="Hz"
-            onChange={setMinCutoff}
-            helperText="Lower values filter out tremor jitter when stationary. Default: 1.0 Hz."
+            onChange={(val) => updateSettings({ min_cutoff: val })}
+            helperText="Lower values filter out tremor jitter when stationary. Default: 0.25 Hz."
           />
 
           <SliderControl
             label="Speed Coefficient (Beta)"
-            value={beta}
-            min={0.001}
-            max={0.2}
-            step={0.005}
+            value={settings.beta}
+            min={0.002}
+            max={0.1}
+            step={0.002}
             unit="coeff"
-            onChange={setBeta}
-            helperText="Higher values reduce pointer lag when your gaze shifts rapidly. Default: 0.05."
+            onChange={(val) => updateSettings({ beta: val })}
+            helperText="Higher values reduce pointer lag when your gaze shifts rapidly. Default: 0.012."
           />
         </SettingsCard>
 
@@ -132,53 +174,30 @@ export const AccessibilitySettingsPage = () => {
         >
           <SliderControl
             label="Minimum Dwell Hold Duration"
-            value={minDwellMs}
+            value={settings.min_dwell_ms}
             min={300}
             max={1200}
             step={50}
             unit="ms"
-            onChange={setMinDwellMs}
+            onChange={(val) => updateSettings({ min_dwell_ms: val })}
             helperText="Base dwell duration on stationary targets. Default: 600ms."
           />
 
           <SliderControl
             label="Dwell Target Radius Tolerance"
-            value={dwellRadiusPx}
+            value={settings.dwell_radius_px}
             min={15}
             max={70}
             step={5}
             unit="px"
-            onChange={setDwellRadiusPx}
+            onChange={(val) => updateSettings({ dwell_radius_px: val })}
             helperText="Pixel distance tolerance for ocular stability. Default: 35px."
           />
         </SettingsCard>
 
-        {/* Visual Accessibility Preferences */}
-        <SettingsCard
-          title="Visual & UI Accessibility"
-          description="Adjust contrast and interface responsiveness to individual patient requirements."
-          icon={Eye}
-        >
-          <div className="flex items-center justify-between pt-1">
-            <div>
-              <div className="text-sm font-medium text-txt-primary">High Contrast Borders</div>
-              <p className="text-[11px] text-txt-muted">Intensifies UI borders and target visibility.</p>
-            </div>
-            <ToggleSwitch checked={highContrast} onChange={setHighContrast} />
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
-            <div>
-              <div className="text-sm font-medium text-txt-primary">Reduced Motion Animations</div>
-              <p className="text-[11px] text-txt-muted">Minimizes page transitions and decorative animations.</p>
-            </div>
-            <ToggleSwitch checked={reducedMotion} onChange={setReducedMotion} />
-          </div>
-        </SettingsCard>
-
         {/* Local Storage & Privacy Management */}
         <SettingsCard
-          title="Local Privacy & Session Storage"
+          title="Local Privacy & Calibration Reset"
           description="All tracking coordinates and facial vectors stay local on this hardware."
           icon={ShieldCheck}
         >
@@ -190,7 +209,7 @@ export const AccessibilitySettingsPage = () => {
               <button
                 onClick={() => {
                   resetCalibration();
-                  addToast('Calibration file deleted', 'info');
+                  addToast('Calibration file deleted and reset', 'info');
                 }}
                 className="btn-secondary h-8 px-3 text-xs text-red-400 hover:border-red-400"
               >

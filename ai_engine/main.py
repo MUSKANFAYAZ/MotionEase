@@ -71,6 +71,7 @@ class MotionEaseEngine:
         self.is_tracking = True # Gaze/pointer tracking active state
         self.process = psutil.Process()
         self._last_hotkey_time = 0.0
+        self.target_fps = config.CURSOR_UPDATE_RATE_HZ
 
         # Initialize OS Control and Multimodal Fusion
         self.dispatcher = ActionDispatcher()
@@ -133,6 +134,7 @@ class MotionEaseEngine:
         logger.info("  * Press [ESC] anywhere in Windows to PAUSE / RESUME control.")
         logger.info("  * Press [F8] anywhere in Windows for EMERGENCY STOP.")
         logger.info("  * Move physical mouse/touchpad to yield control to human.")
+        logger.info(f"  * Invert X: {self.gaze_tracker.invert_x} | Target Rate: {self.target_fps} Hz")
         logger.info("=" * 64)
 
         # 4. Main Processing Loop
@@ -220,7 +222,7 @@ class MotionEaseEngine:
             ret, frame, timestamp_ms = self.camera.read_frame()
 
             if not ret or frame is None:
-                time.sleep(0.01)
+                time.sleep(0.008)
                 continue
 
             self._last_frame_bgr = frame
@@ -334,8 +336,11 @@ class MotionEaseEngine:
                 self._broadcast_system_metrics()
                 self.last_metrics_broadcast = now
 
-            # Throttle to maintain target frame rate
-            time.sleep(0.005)
+            # Dynamic throttle according to target_fps (30 or 60 Hz)
+            loop_duration = time.perf_counter() - loop_start
+            target_period = 1.0 / max(15, self.target_fps)
+            sleep_time = max(0.001, target_period - loop_duration)
+            time.sleep(sleep_time)
 
     def _broadcast_telemetry(self, detection, gaze_data, head_data, gesture_data, dwell_data, ui_landmarks):
         """Constructs and broadcasts structured telemetry JSON to React dashboard."""
@@ -365,7 +370,10 @@ class MotionEaseEngine:
                 "raw_y": gaze_data.get("raw_y", 0.5) if gaze_data else 0.5,
                 "confidence": gaze_data["confidence"] if gaze_data else 0.0,
                 "mode": gaze_data.get("mode") if gaze_data else "searching",
-                "is_calibrated": self.gaze_tracker.is_calibrated
+                "is_calibrated": self.gaze_tracker.is_calibrated,
+                "invert_x": self.gaze_tracker.invert_x,
+                "invert_y": self.gaze_tracker.invert_y,
+                "sensitivity": self.gaze_tracker.sensitivity
             },
             "head": {
                 "pitch": head_data.get("pitch", 0.0) if head_data else 0.0,
@@ -414,7 +422,16 @@ class MotionEaseEngine:
             "emergency_stop": self.dispatcher.emergency_stop,
             "fusion": self.fusion.get_fusion_state(),
             "slm": self.slm_engine.get_status(),
-            "recent_actions": self.dispatcher.get_recent_actions(limit=10)
+            "recent_actions": self.dispatcher.get_recent_actions(limit=10),
+            "settings": {
+                "invert_x": self.gaze_tracker.invert_x,
+                "invert_y": self.gaze_tracker.invert_y,
+                "cursor_speed": self.gaze_tracker.sensitivity,
+                "deadband_px": self.dispatcher.mouse.deadband_px,
+                "cursor_rate_hz": self.target_fps,
+                "min_cutoff": self.one_euro.filter_x.min_cutoff,
+                "beta": self.one_euro.filter_x.beta
+            }
         }
         self.ws_server.broadcast(msg)
 
@@ -557,6 +574,19 @@ class MotionEaseEngine:
             self.speech_recognizer.feed_simulated_or_direct_transcript(text)
 
         elif cmd == "UPDATE_SETTINGS":
+            # Real-time manual adjustments from UI
+            if "invert_x" in data:
+                self.gaze_tracker.update_settings(invert_x=data["invert_x"])
+            if "invert_y" in data:
+                self.gaze_tracker.update_settings(invert_y=data["invert_y"])
+            if "cursor_speed" in data:
+                self.gaze_tracker.update_settings(sensitivity=data["cursor_speed"])
+            if "deadband_px" in data:
+                self.dispatcher.mouse.update_settings(deadband_px=data["deadband_px"])
+            if "cursor_rate_hz" in data:
+                self.target_fps = max(15, min(120, int(data["cursor_rate_hz"])))
+                logger.info(f"Target cursor update frequency set to {self.target_fps} Hz")
+
             # Update One-Euro, Dwell, or Gesture settings dynamically
             one_euro_cfg = data.get("one_euro")
             if one_euro_cfg:
@@ -568,6 +598,9 @@ class MotionEaseEngine:
             if dwell_cfg:
                 self.dwell_controller.min_dwell_ms = dwell_cfg.get("min_dwell_ms", self.dwell_controller.min_dwell_ms)
                 self.dwell_controller.radius_px = dwell_cfg.get("radius_px", self.dwell_controller.radius_px)
+
+            # Broadcast updated status immediately so UI stays in sync
+            self._broadcast_system_metrics()
 
     def stop(self):
         """Clean shutdown releasing all resources."""
