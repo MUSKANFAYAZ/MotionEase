@@ -132,13 +132,15 @@ class GazeTracker:
             raw_face_x = 0.5
             raw_face_y = 0.5
 
-        # Pre-smooth face anchor with exponential moving average to filter landmark noise
+        # Pre-smooth face anchor with heavy exponential moving average.
+        # Alpha=0.08 gives tau≈12 frames at 30fps (~0.4s), suppressing breathing-rate sway
+        # (breathing ~0.3 Hz moves nose ±0.5-2px which is now blended out slowly).
         if self._smooth_face_x is None:
             self._smooth_face_x = raw_face_x
             self._smooth_face_y = raw_face_y
         else:
-            self._smooth_face_x = 0.35 * raw_face_x + 0.65 * self._smooth_face_x
-            self._smooth_face_y = 0.35 * raw_face_y + 0.65 * self._smooth_face_y
+            self._smooth_face_x = 0.08 * raw_face_x + 0.92 * self._smooth_face_x
+            self._smooth_face_y = 0.08 * raw_face_y + 0.92 * self._smooth_face_y
 
         face_x = self._smooth_face_x
         face_y = self._smooth_face_y
@@ -169,8 +171,13 @@ class GazeTracker:
             def _smooth_gain(delta: float) -> float:
                 sign = 1.0 if delta >= 0 else -1.0
                 mag = abs(delta)
-                # Controlled progressive gain: ~1.25x for small deltas, gentle boost for edges
-                curved = (mag * 1.25) + (mag ** 1.6) * 1.1
+                # Suppress micro-sway in the breathing range (~0.015 norm units ≈ 10–15px)
+                # Natural head sway from breathing falls below this threshold;
+                # intentional head turns produce deltas well above it.
+                if mag < 0.015:
+                    return 0.0
+                effective = mag - 0.015  # subtract dead-zone before amplifying
+                curved = (effective * 1.25) + (effective ** 1.6) * 1.0
                 return sign * curved
 
             macro_x = 0.5 + _smooth_gain(dx)

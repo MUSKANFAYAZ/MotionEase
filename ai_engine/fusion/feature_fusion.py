@@ -35,6 +35,17 @@ class MultimodalFeatureFusion:
         self._previous_pitch = None
         self._previous_pitch_time = None
 
+        # Motion-intent gate: suppresses cursor dispatch when gaze hasn't moved enough.
+        # Prevents cursor drift caused by breathing-rate facial micro-sway.
+        # We track the last gaze point that actually triggered a cursor move in
+        # normalised [0,1] coordinates and only dispatch again once the new point
+        # differs by at least _GAZE_MOTION_GATE_PX pixels on a 1920-wide screen
+        # (i.e. ~4 / 1920 ≈ 0.0021 in normalised units).
+        self._last_dispatched_gaze_x: Optional[float] = None
+        self._last_dispatched_gaze_y: Optional[float] = None
+        # Minimum screen-pixel movement (at 1920×1080 reference) before cursor update
+        self._GAZE_MOTION_GATE_PX = 4.0
+
     def set_modality_status(self, modality: str, enabled: bool):
         """Enables or disables individual input channels."""
         if modality == "gaze":
@@ -92,7 +103,20 @@ class MultimodalFeatureFusion:
 
             # Only move cursor if user is not in the middle of a drastic head scroll
             if not is_scrolling:
-                self.router.route_gaze_movement(gx, gy, g_conf)
+                # Motion-intent gate: skip the cursor update if the filtered gaze
+                # point has barely moved (noise from breathing / micro-sway).
+                # We compare in pixel space using a 1920-wide reference screen.
+                should_dispatch = True
+                if self._last_dispatched_gaze_x is not None:
+                    dx_px = abs(gx - self._last_dispatched_gaze_x) * 1920.0
+                    dy_px = abs(gy - self._last_dispatched_gaze_y) * 1080.0
+                    if dx_px < self._GAZE_MOTION_GATE_PX and dy_px < self._GAZE_MOTION_GATE_PX:
+                        should_dispatch = False
+
+                if should_dispatch:
+                    self._last_dispatched_gaze_x = gx
+                    self._last_dispatched_gaze_y = gy
+                    self.router.route_gaze_movement(gx, gy, g_conf)
 
         # 3. Facial Gestures
         if self.gesture_enabled and gesture_data:
