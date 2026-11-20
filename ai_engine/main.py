@@ -23,6 +23,17 @@ from utils.logger import get_logger
 from utils.helpers import current_time_ms
 import config
 
+# Setup Windows native API for global emergency stop hotkeys
+_is_windows = sys.platform == "win32"
+if _is_windows:
+    try:
+        import ctypes
+        _user32 = ctypes.windll.user32
+    except Exception:
+        _user32 = None
+else:
+    _user32 = None
+
 # Vision modules
 from vision.camera import CameraManager
 from vision.preprocessing import ImagePreprocessor
@@ -59,6 +70,7 @@ class MotionEaseEngine:
         self.is_running = False
         self.is_tracking = True # Gaze/pointer tracking active state
         self.process = psutil.Process()
+        self._last_hotkey_time = 0.0
 
         # Initialize OS Control and Multimodal Fusion
         self.dispatcher = ActionDispatcher()
@@ -115,7 +127,13 @@ class MotionEaseEngine:
         if audio_started:
             self.speech_recognizer.start(on_intent_callback=self._on_voice_intent)
 
-        logger.info("MotionEase Engine started successfully. Beginning processing loop.")
+        logger.info("=" * 64)
+        logger.info("  MotionEase Engine Started Successfully!")
+        logger.info("  [SAFETY FAILSAFE ACTIVE]")
+        logger.info("  * Press [ESC] anywhere in Windows to PAUSE / RESUME control.")
+        logger.info("  * Press [F8] anywhere in Windows for EMERGENCY STOP.")
+        logger.info("  * Move physical mouse/touchpad to yield control to human.")
+        logger.info("=" * 64)
 
         # 4. Main Processing Loop
         try:
@@ -140,11 +158,64 @@ class MotionEaseEngine:
             "timestamp": time.strftime("%H:%M:%S")
         })
 
+    def _check_global_hotkeys(self):
+        """
+        Global Windows hotkey listener:
+        - ESC: Instant Pause / Resume tracking
+        - F8: Instant Emergency Stop / Resume
+        Works globally across Windows even if the window is not focused!
+        """
+        if not _user32:
+            return
+        try:
+            # 0x1B = VK_ESCAPE, 0x77 = VK_F8
+            esc_down = bool(_user32.GetAsyncKeyState(0x1B) & 0x8000)
+            f8_down = bool(_user32.GetAsyncKeyState(0x77) & 0x8000)
+
+            now = time.perf_counter()
+            if (esc_down or f8_down) and (now - self._last_hotkey_time) > 0.35:
+                self._last_hotkey_time = now
+
+                if esc_down:
+                    self.is_tracking = not self.is_tracking
+                    self.dispatcher.set_paused(not self.is_tracking)
+                    state = "RESUMED" if self.is_tracking else "PAUSED"
+                    logger.warning(f"*** [SAFETY HOTKEY] ESC pressed: Tracking {state} ***")
+                    self.ws_server.broadcast({
+                        "type": "hotkey_event",
+                        "key": "ESC",
+                        "action": "TOGGLE_TRACKING",
+                        "is_tracking": self.is_tracking,
+                        "message": f"Tracking {state} (ESC hotkey pressed)"
+                    })
+                    self._broadcast_system_metrics()
+
+                elif f8_down:
+                    new_stop = not self.dispatcher.emergency_stop
+                    self.dispatcher.set_emergency_stop(new_stop)
+                    self.is_tracking = not new_stop
+                    state = "ACTIVATED" if new_stop else "DEACTIVATED"
+                    logger.critical(f"*** [SAFETY HOTKEY] F8 pressed: Emergency Stop {state} ***")
+                    self.ws_server.broadcast({
+                        "type": "hotkey_event",
+                        "key": "F8",
+                        "action": "EMERGENCY_STOP",
+                        "emergency_stop": new_stop,
+                        "is_tracking": self.is_tracking,
+                        "message": f"Emergency Stop {state} (F8 hotkey pressed)"
+                    })
+                    self._broadcast_system_metrics()
+        except Exception:
+            pass
+
     def _main_loop(self):
         fps_timer = time.perf_counter()
         frames_in_second = 0
 
         while self.is_running:
+            # Check global hotkeys (ESC, F8) on every iteration
+            self._check_global_hotkeys()
+
             loop_start = time.perf_counter()
             ret, frame, timestamp_ms = self.camera.read_frame()
 
@@ -174,7 +245,7 @@ class MotionEaseEngine:
                 right_iris = detection["right_iris"]
                 blendshapes = detection["blendshapes"]
 
-                # A. Head Pose Estimation
+                # A. Head Pose Estimation (Yaw, Pitch, Roll)
                 head_data = self.head_pose.estimate_pose(landmarks_px, frame.shape[:2])
 
                 # B. Facial Gesture Recognition (EAR + Blendshapes)
@@ -185,7 +256,7 @@ class MotionEaseEngine:
                     timestamp_ms
                 )
 
-                # C. Eye Gaze Tracking & Polynomial Calibration Mapping
+                # C. Eye Gaze Tracking & Calibration Mapping
                 gaze_data = self.gaze_tracker.estimate_gaze(landmarks_norm, left_iris, right_iris)
                 raw_x = gaze_data["screen_x"]
                 raw_y = gaze_data["screen_y"]
@@ -193,7 +264,11 @@ class MotionEaseEngine:
                 # D. Signal Filtering: Speed-Gain Adaptive 1€ Filter + Kalman
                 timestamp_sec = timestamp_ms / 1000.0 if timestamp_ms > 0 else time.perf_counter()
                 euro_x, euro_y = self.one_euro.filter(raw_x, raw_y, timestamp_sec)
-                filtered_x, filtered_y = self.kalman.update(euro_x, euro_y)
+                # Keep Kalman filter state updated for kinematics & metrics
+                self.kalman.update(euro_x, euro_y)
+
+                # Use One-Euro filtered coordinates directly for rock-solid stability without ringing
+                filtered_x, filtered_y = euro_x, euro_y
 
                 # Overwrite gaze_data with filtered coordinates
                 gaze_data["screen_x"] = round(filtered_x, 4)
@@ -218,7 +293,6 @@ class MotionEaseEngine:
                     )
 
                 # Compact subsampled landmarks for frontend canvas visualization
-                # Key facial contour indices + iris centers
                 key_indices = [
                     10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
                     397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,

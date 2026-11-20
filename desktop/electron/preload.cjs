@@ -33,5 +33,10 @@ contextBridge.exposeInMainWorld('motionEaseBridge', {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('backend-state-change', handler);
     return () => ipcRenderer.removeListener('backend-state-change', handler);
+  },
+  onGlobalHotkey: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('global-hotkey', handler);
+    return () => ipcRenderer.removeListener('global-hotkey', handler);
   }
 });

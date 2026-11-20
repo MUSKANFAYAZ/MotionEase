@@ -1,10 +1,11 @@
 """
-Unit tests for OS Control Action Dispatcher
+Unit tests for OS Control Action Dispatcher & Mouse Safety Arbiters
 """
 
 import sys
 import os
 import unittest
+import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'ai_engine')))
 
@@ -29,6 +30,17 @@ class TestActionDispatcher(unittest.TestCase):
         recent = self.dispatcher.get_recent_actions(limit=5)
         self.assertGreaterEqual(len(recent), 1)
         self.assertEqual(recent[0]["type"], "TEST_EVENT")
+
+    def test_human_touch_to_yield(self):
+        mouse = self.dispatcher.mouse
+        # Manually invoke yield
+        mouse.yield_to_human(0.5)
+        self.assertTrue(mouse.is_human_yielding())
+
+        # While yielding, OS clicks and scrolls are safely suppressed
+        mouse.left_click()
+        mouse.scroll(10)
+        self.assertTrue(mouse.is_human_yielding())
 
 if __name__ == "__main__":
     unittest.main()

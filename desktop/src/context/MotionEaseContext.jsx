@@ -85,6 +85,40 @@ export const MotionEaseProvider = ({ children }) => {
     }, 4000);
   }, []);
 
+  // Command Methods
+  const startTracking = useCallback(() => {
+    wsService.sendCommand('START_TRACKING');
+    setSystemStatus((prev) => ({ ...prev, is_tracking: true, is_paused: false, emergency_stop: false }));
+    addToast('Hands-free control started', 'success');
+  }, [addToast]);
+
+  const pauseTracking = useCallback(() => {
+    wsService.sendCommand('PAUSE_TRACKING');
+    setSystemStatus((prev) => ({ ...prev, is_tracking: false, is_paused: true }));
+    addToast('Hands-free control paused (Press ESC or click Start to resume)', 'warning');
+  }, [addToast]);
+
+  const stopTracking = useCallback(() => {
+    wsService.sendCommand('STOP_TRACKING');
+    setSystemStatus((prev) => ({ ...prev, is_tracking: false, is_paused: true }));
+    addToast('Tracking stopped', 'info');
+  }, [addToast]);
+
+  const triggerEmergencyStop = useCallback(() => {
+    wsService.sendCommand('EMERGENCY_STOP');
+    if (window.motionEaseBridge?.triggerEmergencyStop) {
+      window.motionEaseBridge.triggerEmergencyStop();
+    }
+    setSystemStatus((prev) => ({ ...prev, emergency_stop: true, is_tracking: false }));
+    addToast('EMERGENCY STOP ACTIVATED! (Press F8 to clear)', 'danger');
+  }, [addToast]);
+
+  const resumeEmergencyStop = useCallback(() => {
+    wsService.sendCommand('RESUME_EMERGENCY_STOP');
+    setSystemStatus((prev) => ({ ...prev, emergency_stop: false, is_tracking: true }));
+    addToast('Emergency stop cleared. Resuming control.', 'success');
+  }, [addToast]);
+
   // Initialize WebSocket & event listeners
   useEffect(() => {
     wsService.connect();
@@ -134,6 +168,24 @@ export const MotionEaseProvider = ({ children }) => {
       }));
       if (data.recent_actions && data.recent_actions.length > 0) {
         setActionLog(data.recent_actions);
+      }
+    });
+
+    const unsubHotkey = wsService.on('hotkey_event', (data) => {
+      if (data.action === 'TOGGLE_TRACKING') {
+        setSystemStatus((prev) => ({
+          ...prev,
+          is_tracking: data.is_tracking,
+          is_paused: !data.is_tracking
+        }));
+        addToast(data.message, data.is_tracking ? 'success' : 'warning');
+      } else if (data.action === 'EMERGENCY_STOP') {
+        setSystemStatus((prev) => ({
+          ...prev,
+          emergency_stop: data.emergency_stop,
+          is_tracking: !data.emergency_stop
+        }));
+        addToast(data.message, data.emergency_stop ? 'danger' : 'success');
       }
     });
 
@@ -207,51 +259,72 @@ export const MotionEaseProvider = ({ children }) => {
       }
     });
 
+    // Browser-level keyboard shortcut listeners
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSystemStatus((prev) => {
+          if (prev.is_tracking) {
+            pauseTracking();
+          } else {
+            startTracking();
+          }
+          return prev;
+        });
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        setSystemStatus((prev) => {
+          if (prev.emergency_stop) {
+            resumeEmergencyStop();
+          } else {
+            triggerEmergencyStop();
+          }
+          return prev;
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Electron global shortcut listener
+    let unsubGlobalHotkey = null;
+    if (window.motionEaseBridge?.onGlobalHotkey) {
+      unsubGlobalHotkey = window.motionEaseBridge.onGlobalHotkey((data) => {
+        if (data.key === 'Escape') {
+          setSystemStatus((prev) => {
+            if (prev.is_tracking) {
+              pauseTracking();
+            } else {
+              startTracking();
+            }
+            return prev;
+          });
+        } else if (data.key === 'F8') {
+          setSystemStatus((prev) => {
+            if (prev.emergency_stop) {
+              resumeEmergencyStop();
+            } else {
+              triggerEmergencyStop();
+            }
+            return prev;
+          });
+        }
+      });
+    }
+
     return () => {
       unsubConn();
       unsubTelemetry();
       unsubStatus();
+      unsubHotkey();
       unsubVoice();
       unsubDevices();
       unsubKeyboard();
       unsubCalibration();
+      window.removeEventListener('keydown', handleKeyDown);
+      if (unsubGlobalHotkey) unsubGlobalHotkey();
       wsService.disconnect();
     };
-  }, [addToast]);
-
-  // Command Methods
-  const startTracking = () => {
-    wsService.sendCommand('START_TRACKING');
-    setSystemStatus((prev) => ({ ...prev, is_tracking: true, is_paused: false }));
-    addToast('Hands-free control started', 'success');
-  };
-
-  const pauseTracking = () => {
-    wsService.sendCommand('PAUSE_TRACKING');
-    setSystemStatus((prev) => ({ ...prev, is_tracking: false, is_paused: true }));
-    addToast('Hands-free control paused', 'warning');
-  };
-
-  const stopTracking = () => {
-    wsService.sendCommand('STOP_TRACKING');
-    setSystemStatus((prev) => ({ ...prev, is_tracking: false, is_paused: true }));
-    addToast('Tracking stopped', 'info');
-  };
-
-  const triggerEmergencyStop = () => {
-    wsService.sendCommand('EMERGENCY_STOP');
-    if (window.motionEaseBridge?.triggerEmergencyStop) {
-      window.motionEaseBridge.triggerEmergencyStop();
-    }
-    setSystemStatus((prev) => ({ ...prev, emergency_stop: true, is_tracking: false }));
-    addToast('EMERGENCY STOP ACTIVATED! All computer control locked.', 'danger');
-  };
-
-  const resumeEmergencyStop = () => {
-    wsService.sendCommand('RESUME_EMERGENCY_STOP');
-    setSystemStatus((prev) => ({ ...prev, emergency_stop: false, is_tracking: true }));
-    addToast('Emergency stop cleared. Resuming control.', 'success');
-  };
+  }, [addToast, pauseTracking, startTracking, triggerEmergencyStop, resumeEmergencyStop]);
 
   const toggleModality = (modality, enabled) => {
     setModalities((prev) => ({ ...prev, [modality]: enabled }));

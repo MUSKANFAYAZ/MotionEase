@@ -11,7 +11,9 @@ import {
   Smile,
   Mic,
   Activity,
-  Layers
+  Layers,
+  MousePointer,
+  Keyboard
 } from 'lucide-react';
 import { useMotionEase } from '../context/MotionEaseContext';
 import WebcamPreview from '../components/WebcamPreview';
@@ -52,40 +54,73 @@ export const ControlStudioPage = () => {
             {systemStatus.emergency_stop ? (
               <button
                 onClick={resumeEmergencyStop}
-                className="btn-primary h-9 px-4 text-xs bg-emerald-600 hover:bg-emerald-500"
+                className="btn-primary h-9 px-4 text-xs bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1.5"
               >
-                Clear Emergency Lock
+                <span>Clear Lock (F8)</span>
               </button>
             ) : (
               <button
                 onClick={triggerEmergencyStop}
                 className="btn-danger h-9 px-4 text-xs flex items-center gap-1.5"
+                title="Stop all computer control (F8 hotkey)"
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
                 <span>Emergency Stop</span>
+                <kbd className="px-1 py-0.2 rounded bg-red-900/60 font-mono text-[10px]">F8</kbd>
               </button>
             )}
 
             {systemStatus.is_tracking ? (
               <button
                 onClick={pauseTracking}
-                className="btn-secondary h-9 px-3 text-xs flex items-center gap-1.5"
+                className="btn-secondary h-9 px-3 text-xs flex items-center gap-1.5 border-amber-400/40 text-amber-300 hover:border-amber-400"
+                title="Pause control (ESC hotkey)"
               >
                 <Pause className="w-3.5 h-3.5 text-amber-400" />
                 <span>Pause</span>
+                <kbd className="px-1 py-0.2 rounded bg-surface-secondary font-mono text-[10px]">ESC</kbd>
               </button>
             ) : (
               <button
                 onClick={startTracking}
                 className="btn-primary h-9 px-4 text-xs flex items-center gap-1.5"
+                title="Resume control (ESC hotkey)"
               >
                 <Play className="w-3.5 h-3.5 text-white" />
                 <span>Resume Tracking</span>
+                <kbd className="px-1 py-0.2 rounded bg-blue-700 font-mono text-[10px]">ESC</kbd>
               </button>
             )}
           </div>
         }
       />
+
+      {/* Safety & User Control Banner */}
+      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-950/40 via-surface-primary to-surface-secondary border border-accent-primary/20 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-cyan-400">
+            <MousePointer className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <span className="font-semibold text-txt-primary">Smart Touch-to-Yield Active:</span>{' '}
+            <span className="text-txt-muted">
+              Touching your laptop trackpad or physical mouse immediately yields control to you for 2s.
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 text-txt-muted font-mono text-[11px]">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-surface-secondary border border-border-color text-cyan-400 font-bold">ESC</kbd>
+            <span>Toggle Pause</span>
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-surface-secondary border border-border-color text-red-400 font-bold">F8</kbd>
+            <span>Stop All</span>
+          </span>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Webcam Stream with Real-Time Canvas Overlay (7 cols) */}
@@ -105,7 +140,7 @@ export const ControlStudioPage = () => {
                 title="Pause tracking and save the current head position as neutral"
               >
                 <Compass className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Recenter Head (Optional)</span>
+                <span>Recenter Head</span>
               </button>
 
               <button
@@ -139,7 +174,7 @@ export const ControlStudioPage = () => {
 
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-2.5 rounded-xl bg-surface-secondary border border-border-color/50">
-                <span className="text-txt-muted block text-[11px]">Filtered Gaze (X, Y)</span>
+                <span className="text-txt-muted block text-[11px]">Filtered Pointer (X, Y)</span>
                 <span className="font-mono font-bold text-txt-primary mt-1 block">
                   {(telemetry.gaze.x * 100).toFixed(1)}%, {(telemetry.gaze.y * 100).toFixed(1)}%
                 </span>

@@ -125,12 +125,23 @@ class GazeTracker:
                 mode = "fallback_linear"
         else:
             # Active heuristic: combines head orientation (macro) and iris gaze (micro)
-            # Center baseline at (0.5, 0.5) with responsive sensitivity gains
-            macro_x = (face_x - 0.5) * 2.5 + 0.5
-            macro_y = (face_y - 0.45) * 2.5 + 0.5
+            # Smooth non-linear curve prevents micro-tremor around center while allowing easy edge reach
+            dx = face_x - 0.5
+            dy = face_y - 0.5
 
-            micro_x = (avg_rel_x - 0.5) * 1.6
-            micro_y = (avg_rel_y - 0.5) * 1.6
+            def _smooth_gain(delta: float) -> float:
+                sign = 1.0 if delta >= 0 else -1.0
+                mag = abs(delta)
+                # Controlled progressive gain: ~1.25x for small deltas, gentle boost for edges
+                curved = (mag * 1.25) + (mag ** 1.6) * 1.1
+                return sign * curved
+
+            macro_x = 0.5 + _smooth_gain(dx)
+            macro_y = 0.5 + _smooth_gain(dy)
+
+            # Subtle micro iris deflection (scaled down to eliminate rapid flutter)
+            micro_x = (avg_rel_x - 0.5) * 0.35
+            micro_y = (avg_rel_y - 0.5) * 0.35
 
             screen_x = clamp(macro_x + micro_x, 0.0, 1.0)
             screen_y = clamp(macro_y + micro_y, 0.0, 1.0)

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -35,7 +35,7 @@ function startPythonBackend() {
   pythonProcess.stdout.on('data', (data) => {
     const text = data.toString().trim();
     console.log(`[Python Engine] ${text}`);
-    if (text.includes('WebSocket server running') || text.includes('Engine started')) {
+    if (text.includes('WebSocket server running') || text.includes('Engine started') || text.includes('Started Successfully')) {
       backendStatus = 'running';
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('backend-state-change', { status: 'running' });
@@ -173,9 +173,32 @@ app.whenReady().then(() => {
   createWindow();
   startPythonBackend();
 
+  // Register global emergency stop & pause shortcuts in Electron
+  try {
+    globalShortcut.register('Escape', () => {
+      console.log('[Electron Hotkey] ESC pressed -> sending toggle event');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('global-hotkey', { key: 'Escape' });
+      }
+    });
+    globalShortcut.register('F8', () => {
+      console.log('[Electron Hotkey] F8 pressed -> sending emergency stop event');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('global-hotkey', { key: 'F8' });
+      }
+    });
+  } catch (err) {
+    console.warn('[Electron] Global shortcut registration notice:', err);
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  stopPythonBackend();
 });
 
 app.on('before-quit', () => {

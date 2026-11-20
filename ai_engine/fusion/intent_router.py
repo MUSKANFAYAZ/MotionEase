@@ -97,9 +97,9 @@ class IntentRouter:
             if self.resolver.resolve_click("RIGHT_CLICK", source="voice"):
                 self.dispatcher.dispatch("RIGHT_CLICK")
         elif intent == "SCROLL_UP":
-            self.dispatcher.dispatch("SCROLL", 120)
+            self.dispatcher.dispatch("SCROLL", 3)
         elif intent == "SCROLL_DOWN":
-            self.dispatcher.dispatch("SCROLL", -120)
+            self.dispatcher.dispatch("SCROLL", -3)
         elif intent == "PRESS_ENTER":
             self.dispatcher.dispatch("PRESS_KEY", "enter")
         elif intent == "PRESS_BACKSPACE":

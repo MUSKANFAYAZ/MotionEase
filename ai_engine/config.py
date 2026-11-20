@@ -49,14 +49,14 @@ CALIBRATION_POINTS = [
 SAMPLES_PER_CALIBRATION_POINT = 30
 
 # Signal Filtering: One-Euro Filter Parameters
-ONE_EURO_MIN_CUTOFF = 1.0       # Minimum cutoff frequency in Hz
-ONE_EURO_BETA = 0.05            # Speed coefficient (higher = less lag, lower = more smooth)
+ONE_EURO_MIN_CUTOFF = 0.35      # Minimum cutoff frequency in Hz (0.35 Hz for stable fixation)
+ONE_EURO_BETA = 0.015           # Speed coefficient (adaptive responsiveness during movement)
 ONE_EURO_DCUTOFF = 1.0          # Derivative cutoff frequency
 
 # Kalman Filter Parameters
 KALMAN_PROCESS_NOISE = 1e-4
 KALMAN_MEASUREMENT_NOISE = 1e-2
-CURSOR_DEADBAND_PIXELS = 6
+CURSOR_DEADBAND_PIXELS = 5
 KALMAN_MAX_INNOVATION = 0.2
 
 # Dynamic Dwell Scaling
@@ -74,19 +74,23 @@ SMILE_MAR_THRESHOLD = 0.45       # Mouth aspect / smile ratio
 MOUTH_OPEN_RATIO = 0.50
 GESTURE_COOLDOWN_MS = 600
 
-# Head Pose Scroll Thresholds (degrees)
-HEAD_PITCH_SCROLL_UP = -12.0
-HEAD_PITCH_SCROLL_DOWN = 10.0
-HEAD_PITCH_SCROLL_UP_RELEASE = -8.0
-HEAD_PITCH_SCROLL_DOWN_RELEASE = 6.0
-HEAD_YAW_THRESHOLD = 18.0
+# Head Pose Scroll Thresholds (degrees) - Calibrated for Laptop Viewing Angles
+HEAD_PITCH_SCROLL_UP = -18.0
+HEAD_PITCH_SCROLL_DOWN = 20.0
+HEAD_PITCH_SCROLL_UP_RELEASE = -12.0
+HEAD_PITCH_SCROLL_DOWN_RELEASE = 14.0
+HEAD_YAW_THRESHOLD = 20.0
 HEAD_AUTO_CALIBRATION_FRAMES = 30
-SCROLL_SPEED_BASE = 40
-SCROLL_COOLDOWN_MS = 100
-SCROLL_MIN_AMOUNT = 2
-SCROLL_MAX_AMOUNT = 14
-SCROLL_DEGREES_FOR_MAX = 25.0
-SCROLL_VELOCITY_FOR_MAX = 40.0
+SCROLL_SPEED_BASE = 2
+SCROLL_COOLDOWN_MS = 200
+SCROLL_MIN_AMOUNT = 1
+SCROLL_MAX_AMOUNT = 3
+SCROLL_DEGREES_FOR_MAX = 30.0
+SCROLL_VELOCITY_FOR_MAX = 50.0
+
+# Human Touch-to-Yield Safeguards (Prevents fighting with physical mouse/touchpad)
+HUMAN_OVERRIDE_DISTANCE_PX = 28
+HUMAN_OVERRIDE_YIELD_SEC = 2.0
 
 # Speech Recognition & Voice Intents
 SPEECH_SAMPLE_RATE = 16000
