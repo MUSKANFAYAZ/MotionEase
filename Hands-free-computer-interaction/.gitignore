@@ -1,0 +1,8 @@
+venv/
+node_modules/
+desktop-app/node_modules/
+desktop-app/dist/
+backend/__pycache__/
+backend/scripts/__pycache__/
+backend/data/
+backend/models/vosk-model-small-en-us-0.15/
