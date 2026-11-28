@@ -4,7 +4,45 @@ from unittest.mock import Mock, patch
 
 from pynput.mouse import Button
 
-from scripts.eye1 import DwellClickController, dispatch_gesture
+from scripts.eye1 import (
+    CURSOR_SPEED,
+    AdaptiveKalmanFilter,
+    DwellClickController,
+    OneEuroFilter,
+    dispatch_gesture,
+    map_head_position,
+    stabilize_cursor_position,
+)
+
+
+class CursorMappingTests(unittest.TestCase):
+    def test_head_motion_maps_to_a_slightly_slower_cursor(self):
+        self.assertEqual(CURSOR_SPEED, 0.55)
+        mapped = map_head_position(0.6, 0.5, 0.18)
+        self.assertAlmostEqual(mapped, 0.5 + 0.55 * (0.1 / 0.18))
+
+    def test_cursor_filter_settles_after_head_movement_stops(self):
+        kalman = AdaptiveKalmanFilter()
+        smooth = OneEuroFilter()
+        outputs = []
+
+        for frame in range(75):
+            timestamp = frame / 30
+            measurement = 0.5 + 0.2 * min(timestamp, 1.0)
+            filtered = kalman(measurement, timestamp)
+            outputs.append(smooth(filtered, timestamp))
+
+        self.assertLess(abs(outputs[-1] - 0.7), 0.003)
+        self.assertEqual(kalman.velocity, 0.0)
+
+    def test_cursor_deadband_rejects_small_jitter_and_allows_intentional_motion(self):
+        anchor = (500, 300)
+
+        for jitter in ((504, 303), (497, 298), (505, 300), (500, 306)):
+            with self.subTest(jitter=jitter):
+                self.assertEqual(stabilize_cursor_position(jitter, anchor), anchor)
+
+        self.assertEqual(stabilize_cursor_position((512, 300), anchor), (512, 300))
 
 
 class FakeMouse:

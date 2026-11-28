@@ -27,6 +27,7 @@ class IntentRouter:
         self.spell_checker = SpellChecker(distance=1)
         self.lock = threading.RLock()
         self.dictation_enabled = False
+        self.address_bar_dictation = False
         self.pending_gesture_intent = None
         self.pending_gesture_expires = 0.0
         self._last_blink_at = {}
@@ -100,11 +101,22 @@ class IntentRouter:
             if self.dictation_enabled:
                 if command == "stop dictating":
                     self.dictation_enabled = False
+                    self.address_bar_dictation = False
                     return {"handled": True, "action": "dictation_stopped"}
                 if command == "enter":
                     self.keyboard.press(Key.enter)
                     self.keyboard.release(Key.enter)
+                    if self.address_bar_dictation:
+                        self.dictation_enabled = False
+                        self.address_bar_dictation = False
                     return {"handled": True, "action": "enter_pressed"}
+                if self.address_bar_dictation:
+                    self.keyboard.type(spoken_text)
+                    return {
+                        "handled": True,
+                        "action": "dictation_text",
+                        "text": spoken_text,
+                    }
                 corrected = self._format_dictation(
                     self._spell_check(spoken_text)
                 )
@@ -160,9 +172,11 @@ class IntentRouter:
                 return {"handled": True, "action": command.replace(" ", "_")}
             if command in {"start dictating", "start typing"}:
                 self.dictation_enabled = True
+                self.address_bar_dictation = False
                 return {"handled": True, "action": "dictation_started"}
             if command == "stop dictating":
                 self.dictation_enabled = False
+                self.address_bar_dictation = False
                 return {"handled": True, "action": "dictation_stopped"}
             if command in {"focus address bar", "select address bar"}:
                 modifier = Key.cmd if platform.system() == "Darwin" else Key.ctrl
@@ -170,6 +184,8 @@ class IntentRouter:
                 self.keyboard.press("l")
                 self.keyboard.release("l")
                 self.keyboard.release(modifier)
+                self.dictation_enabled = True
+                self.address_bar_dictation = True
                 return {"handled": True, "action": "address_bar_focused"}
             if command in {
                 "open notepad",

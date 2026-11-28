@@ -41,7 +41,7 @@ const voiceCommandGroups = [
       { phrase: "open files", action: "Open your home folder." },
       { phrase: "open chrome · open edge", action: "Open a new Google Chrome or Microsoft Edge window." },
       { phrase: "open keyboard", action: "Open the operating system's on-screen keyboard for typing in any app." },
-      { phrase: "focus address bar", action: "Focus the browser address bar with Ctrl+L (Command+L on macOS)." },
+      { phrase: "focus address bar", action: "Focus the browser address bar and start free-form dictation; say your search, then say enter." },
     ],
   },
   {
@@ -55,7 +55,7 @@ const voiceCommandGroups = [
   {
     title: "Dictation",
     commands: [
-      { phrase: "start typing · start dictating", action: "Type recognized speech into the currently focused text field." },
+      { phrase: "start typing · start dictating", action: "Type recognized speech into the currently focused text field; use this for general dictation." },
       { phrase: "enter", action: "Press Enter in the focused app; for example, submit a browser search." },
       { phrase: "stop dictating", action: "Stop typing recognized speech." },
       { phrase: "comma · period · full stop · question mark · exclamation mark · new line", action: "Speak these phrases during dictation to insert punctuation or a line break." },
@@ -124,8 +124,8 @@ function GuidePage() {
           <div><h3>Start the app</h3><p>One-time setup, then launch the desktop app</p></div>
         </div>
         <ol className="guide-steps">
-          <li>From the project folder, install the Python requirements and download the Vosk speech model once if it is not already present:</li>
-          <li className="guide-code"><code>python -m venv venv</code><code>.\venv\Scripts\Activate.ps1</code><code>python -m pip install -r backend\requirements.txt</code><code>python backend\scripts\download_vosk_model.py</code></li>
+          <li>From the project folder, install the Python requirements and download both local speech models once if they are not already present:</li>
+          <li className="guide-code"><code>python -m venv venv</code><code>.\venv\Scripts\Activate.ps1</code><code>python -m pip install -r backend\requirements.txt</code><code>python backend\scripts\download_vosk_model.py</code><code>python backend\scripts\download_whisper_model.py</code></li>
           <li>Install the desktop dependencies with <code>npm install</code> in <code>desktop-app</code>, then start the app there with <code>npm run dev</code>.</li>
           <li>When the control window opens, head tracking and offline voice recognition start automatically. Allow microphone and camera access if prompted.</li>
         </ol>
@@ -155,7 +155,7 @@ function GuidePage() {
             </section>
           ))}
         </div>
-        <p className="guide-note">For browser search: say “open chrome” or “open edge”, then “focus address bar”, then “start typing” and speak your search. Say “enter” to submit it and “stop dictating” when finished. Focus a text field before dictating. Say “open keyboard” to launch your system keyboard for any app; the Predictive text box also has an on-screen keyboard whose keys activate after a five-second pointer dwell.</p>
+        <p className="guide-note">For browser search: say “open chrome” or “open edge”, then “focus address bar” and speak your search directly. Say “enter” to submit it; address-bar dictation ends automatically. For other text fields, say “start typing” or “start dictating”. Say “open keyboard” to launch your system keyboard for any app; the Predictive text box also has an on-screen keyboard whose keys activate after a five-second pointer dwell.</p>
       </section>
 
       <section className="guide-lower-grid">
@@ -180,7 +180,7 @@ function GuidePage() {
           </div>
           <ul className="guide-list">
             <li>“Last heard” shows the latest recognized transcript; “Last action” shows the routed result.</li>
-            <li>If voice is stopped, select <strong>Start listening</strong>. If the local model is missing, use the setup command above and restart voice.</li>
+            <li>If voice is stopped, select <strong>Start listening</strong>. If a local speech model is missing, use the setup commands above and restart voice.</li>
             <li>If speech is not recognized, check that the correct microphone is connected and that the Voice status is running.</li>
             <li>Use the Stop buttons on the controls page to stop either service. Restart it there when needed.</li>
           </ul>
@@ -392,26 +392,26 @@ function App() {
         <section className="panel">
           <div className="panel-head">
             <div className="icon voice-icon">〰</div>
-            <div><h3>Offline voice</h3><p>Vosk speech recognition · no cloud audio</p></div>
+            <div><h3>Offline voice</h3><p>Vosk commands + Whisper dictation · no cloud audio</p></div>
           </div>
           <div className="button-row">
             <button disabled={busy || voice.status === "running"} onClick={() => run("Voice recognition started", "/api/voice/start")}>Start listening</button>
             <button className="secondary" disabled={busy || voice.status === "stopped"} onClick={() => run("Voice recognition stopped", "/api/voice/stop")}>Stop</button>
           </div>
           <div
-            className={`voice-model-status ${voice.model_ready ? "ready" : "setup-needed"}`}
+            className={`voice-model-status ${voice.model_ready && voice.dictation_model_ready ? "ready" : "setup-needed"}`}
             role="status"
           >
             <span className="voice-model-indicator" aria-hidden="true" />
-            <span>{voice.model_ready ? "Speech model ready" : "Speech model setup required"}</span>
-            {!voice.model_ready && (
+            <span>{voice.model_ready && voice.dictation_model_ready ? "Speech models ready" : "Speech model setup required"}</span>
+            {!(voice.model_ready && voice.dictation_model_ready) && (
               <button type="button" className="setup-link" onClick={() => setPage("guide")}>
                 View setup
               </button>
             )}
           </div>
           <p className="hint">
-            Say “open chrome” or “open edge”, “focus address bar”, then “start typing” to dictate into the focused field; say “enter” to submit and “stop dictating” to finish. You can also say left click, double click, right click, scroll up/down, or open notepad/calculator/files. For blink confirmation, say “select with blink”, “double click with blink”, or “right click with blink”, then blink.
+            Say “open chrome” or “open edge”, then “focus address bar” and speak your search directly; say “enter” to submit. For other text fields, say “start typing” or “start dictating”. You can also say left click, double click, right click, scroll up/down, or open notepad/calculator/files. For blink confirmation, say “select with blink”, “double click with blink”, or “right click with blink”, then blink.
           </p>
         </section>
       </div>

@@ -139,14 +139,14 @@ This module is the core of the hands-free cursor experience:
 
 ## Voice Control and Predictive Text
 
-- Voice recognition is local through Vosk. The small English model must be downloaded once during setup; recognition works offline afterward.
-- Voice commands use a constrained Vosk grammar to favor the supported command phrases and reject unrelated speech; dictation switches back to unrestricted recognition until `stop dictating`.
+- Voice commands use the small Vosk English model with a constrained grammar; free-form dictation uses the more accurate Faster-Whisper `base.en` model. Both run locally after their one-time downloads.
+- Vosk recognizes supported commands, while Whisper recognizes free-form text in the focused field or browser address bar until `stop dictating` or `enter`.
 - Supported commands include `left click`, `double click`, `right click`, `scroll up`, `scroll down`, `start typing` (or `start dictating`), `stop dictating`, `open keyboard`, and opening Notepad, Calculator, Files, Chrome, or Edge.
-- For a browser search, say `open chrome` or `open edge`, `focus address bar`, and `start typing`; speak the query, then say `enter` to submit it. Say `stop dictating` when finished. Dictation types into the currently focused field.
-- Dictation applies conservative offline spelling correction to recognized text; it does not attempt full grammar rewriting, and arbitrary names or search terms may still need review.
+- For a browser search, say `open chrome` or `open edge`, then `focus address bar` and speak the query; focusing the address bar switches directly to unrestricted speech recognition. Say `enter` to submit the search, or `stop dictating` to leave dictation mode.
+- Address-bar dictation types recognized text as-is to avoid changing names, search terms, or URLs. General dictation started with `start typing` or `start dictating` applies conservative offline spelling correction.
 - Say `open keyboard` to launch the operating system's keyboard for typing in any app. The Predictive text panel has its own keyboard; hold a key with the pointer for five seconds to activate it once.
 - Spoken commands can include common polite framing, such as `please scroll up now` or `could you scroll down for me`; application commands also accept `open the calculator`.
-- In dictation mode, recognized words and punctuation are typed into the currently focused desktop application.
+- In general dictation mode, Whisper-recognized words are typed into the currently focused desktop application, with the existing local spelling and punctuation formatting.
 - Say **“select with blink”** or **“confirm with blink”**, then blink within three seconds to fuse voice intent with a gesture. **“Right click with blink”** arms the right-click equivalent.
 - Predictive text is a lightweight on-device next-word model, not an 8B SLM. It uses built-in common continuations plus word-transition counts learned locally. Counts are stored in `backend/data/autocomplete.json`; raw phrases are not persisted.
 - The Electron renderer uses a restricted preload bridge to call the local Flask API; Node integration is disabled in the UI renderer.
@@ -180,7 +180,7 @@ Hands-free-computer-interaction/
 ├── backend/
 │   ├── server.py        # Flask API and service orchestration
 │   ├── interaction_router.py
-│   ├── voice_service.py # Local Vosk microphone service
+│   ├── voice_service.py # Local Vosk command and Whisper dictation service
 │   ├── scripts/eye1.py # Head tracking, gestures, and cursor filtering
 │   └── models/          # Face model; Vosk model downloaded during setup
 ├── desktop-app/         # Electron + React + Vite UI
@@ -206,9 +206,10 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install -r backend\requirements.txt
 python backend\scripts\download_vosk_model.py
+python backend\scripts\download_whisper_model.py
 ```
 
-The Vosk model download is a one-time setup step. Afterward, the ASR model and camera processing run locally. The [MediaPipe Face Landmarker model](https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task) is bundled at `backend/models/face_landmarker.task`.
+The Vosk and Whisper model downloads are one-time setup steps. The Whisper `base.en` model is about 145 MB; after setup, speech recognition and camera processing run locally without sending audio to a cloud service. The [MediaPipe Face Landmarker model](https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task) is bundled at `backend/models/face_landmarker.task`.
 
 ### Running the Application
 

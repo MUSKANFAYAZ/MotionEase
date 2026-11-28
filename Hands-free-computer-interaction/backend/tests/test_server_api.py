@@ -71,6 +71,16 @@ class ServerApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertIn("download_vosk_model.py", response.json["error"])
 
+    def test_missing_whisper_model_is_reported_before_starting_voice(self):
+        missing_model = (
+            server.voice_service.dictation_model_path.parent / "missing-test-model"
+        )
+        with patch.object(server.voice_service, "dictation_model_path", missing_model):
+            response = self.client.post("/api/voice/start")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("download_whisper_model.py", response.json["error"])
+
     def test_start_eye_tracking_is_success_when_already_running(self):
         with patch.object(server, "eye_tracking_process", FakeProcess()):
             response = self.client.post("/start-eye-tracking")

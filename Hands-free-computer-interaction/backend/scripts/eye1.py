@@ -20,9 +20,12 @@ CAMERA_INDEX = 0
 NOSE_TIP_INDEX = 1
 HORIZONTAL_RANGE = 0.18
 VERTICAL_RANGE = 0.18
-CURSOR_SPEED = 0.65
+CURSOR_SPEED = 0.55
 MIN_CUTOFF = 1.2
 BETA = 0.04
+KALMAN_VELOCITY_DECAY_SECONDS = 0.2
+KALMAN_VELOCITY_DEADBAND = 0.005
+CURSOR_DEADBAND_PIXELS = 10
 BLINK_DURATION = 0.06
 BLINK_REFRACTORY = 0.8
 MOUTH_OPEN_THRESHOLD = 0.65
@@ -122,6 +125,9 @@ class AdaptiveKalmanFilter:
 
         self.position = predicted_position + gain_position * residual
         self.velocity += gain_velocity * residual
+        self.velocity *= math.exp(-elapsed / KALMAN_VELOCITY_DECAY_SECONDS)
+        if abs(self.velocity) < KALMAN_VELOCITY_DEADBAND:
+            self.velocity = 0.0
         self.p00 = (1.0 - gain_position) * predicted_p00
         self.p01 = (1.0 - gain_position) * predicted_p01
         self.p10 = predicted_p10 - gain_velocity * predicted_p00
@@ -368,6 +374,15 @@ def map_head_position(value, neutral, movement_range, cursor_anchor=0.5):
     return min(max(normalized, 0.0), 1.0)
 
 
+def stabilize_cursor_position(position, previous_position):
+    if (
+        previous_position is not None
+        and math.dist(position, previous_position) < CURSOR_DEADBAND_PIXELS
+    ):
+        return previous_position
+    return position
+
+
 def main():
     if not MODEL_PATH.is_file():
         raise FileNotFoundError(f"Face Landmarker model is missing: {MODEL_PATH}")
@@ -401,6 +416,7 @@ def main():
     dwell = DwellClickController()
     neutral_position = None
     cursor_anchor = (0.5, 0.5)
+    stable_cursor_position = None
     dwell_enabled = False
 
     try:
@@ -447,9 +463,15 @@ def main():
                 kalman_target_y = kalman_y(target_y, now)
                 smooth_x = x_filter(kalman_target_x, now)
                 smooth_y = y_filter(kalman_target_y, now)
-                cursor_x = round(smooth_x * (screen_width - 1))
-                cursor_y = round(smooth_y * (screen_height - 1))
-                mouse.position = cursor_x, cursor_y
+                target_cursor_position = (
+                    round(smooth_x * (screen_width - 1)),
+                    round(smooth_y * (screen_height - 1)),
+                )
+                stable_cursor_position = stabilize_cursor_position(
+                    target_cursor_position, stable_cursor_position
+                )
+                cursor_x, cursor_y = stable_cursor_position
+                mouse.position = stable_cursor_position
 
                 left_ear = eye_aspect_ratio(landmarks, (33, 160, 158, 133, 153, 144))
                 right_ear = eye_aspect_ratio(

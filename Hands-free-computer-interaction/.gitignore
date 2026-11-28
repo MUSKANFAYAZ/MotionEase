@@ -6,3 +6,4 @@ backend/__pycache__/
 backend/scripts/__pycache__/
 backend/data/
 backend/models/vosk-model-small-en-us-0.15/
+backend/models/faster-whisper-base.en/

@@ -248,6 +248,33 @@ class IntentRouterTests(unittest.TestCase):
         self.assertEqual(result["action"], "address_bar_focused")
         self.assertEqual(self.router.keyboard.pressed, [Key.ctrl, "l"])
         self.assertEqual(self.router.keyboard.released, ["l", Key.ctrl])
+        self.assertTrue(self.router.is_dictation_enabled())
+        self.assertTrue(self.router.address_bar_dictation)
+
+    def test_address_bar_dictation_preserves_recognized_text_and_stops_on_enter(self):
+        self.router.route_voice("focus address bar")
+
+        with patch.object(self.router, "_spell_check") as spell_check:
+            typed = self.router.route_voice("Search for quik")
+        submitted = self.router.route_voice("enter")
+
+        self.assertEqual(typed["action"], "dictation_text")
+        self.assertEqual(typed["text"], "Search for quik")
+        self.assertEqual(self.router.keyboard.typed, ["Search for quik"])
+        spell_check.assert_not_called()
+        self.assertEqual(submitted["action"], "enter_pressed")
+        self.assertFalse(self.router.is_dictation_enabled())
+        self.assertFalse(self.router.address_bar_dictation)
+
+    def test_address_bar_dictation_preserves_chatgpt_brand_name(self):
+        self.router.route_voice("focus address bar")
+
+        with patch.object(self.router, "_spell_check") as spell_check:
+            result = self.router.route_voice("ChatGPT")
+
+        self.assertEqual(result["text"], "ChatGPT")
+        self.assertEqual(self.router.keyboard.typed, ["ChatGPT"])
+        spell_check.assert_not_called()
 
     def test_open_application_commands_are_allow_listed(self):
         for phrase, application in (
@@ -370,6 +397,67 @@ class OfflineVoiceServiceTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 service.start()
             self.assertEqual(service.status()["status"], "stopped")
+
+    def test_start_requires_local_whisper_dictation_model(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            model_path = Path(temporary_directory) / "vosk"
+            model_path.mkdir()
+            service = OfflineVoiceService(
+                model_path,
+                lambda text: None,
+                dictation_model_path=Path(temporary_directory) / "whisper",
+            )
+
+            with self.assertRaisesRegex(FileNotFoundError, "download_whisper_model.py"):
+                service.start()
+
+    def test_whisper_audio_transcription_returns_model_text(self):
+        class FakeSegment:
+            text = " ChatGPT "
+
+        class FakeWhisperModel:
+            def transcribe(self, audio, **options):
+                self.audio = audio
+                self.options = options
+                return [FakeSegment()], None
+
+        model = FakeWhisperModel()
+        transcript = OfflineVoiceService._transcribe_audio(
+            model,
+            b"\x00\x40",
+        )
+
+        self.assertEqual(transcript, "ChatGPT")
+        self.assertAlmostEqual(model.audio[0], 0.5)
+        self.assertEqual(model.options["language"], "en")
+        self.assertEqual(model.options["beam_size"], 5)
+
+    def test_dictation_controls_are_only_exact_phrases(self):
+        self.assertTrue(OfflineVoiceService._is_dictation_control("Enter."))
+        self.assertTrue(
+            OfflineVoiceService._is_dictation_control("Stop dictating!")
+        )
+        self.assertFalse(OfflineVoiceService._is_dictation_control("enter now"))
+
+    def test_low_confidence_vosk_result_still_sends_audio_to_whisper(self):
+        audio = b"\x00\x40"
+
+        self.assertEqual(
+            OfflineVoiceService._dictation_item("[unk]", audio),
+            ("audio", audio),
+        )
+        self.assertEqual(
+            OfflineVoiceService._dictation_item("", audio),
+            ("audio", audio),
+        )
+        self.assertEqual(
+            OfflineVoiceService._dictation_item("judges jury", audio),
+            ("audio", audio),
+        )
+        self.assertEqual(
+            OfflineVoiceService._dictation_item("Enter.", audio),
+            ("command", "Enter."),
+        )
 
 
 if __name__ == "__main__":

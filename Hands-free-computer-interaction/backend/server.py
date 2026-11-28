@@ -39,6 +39,7 @@ sys.path.extend([BASE_DIR, PARENT_DIR, SCRIPTS_DIR])
 # Define script paths
 EYE_TRACKING_SCRIPT = os.path.join(SCRIPTS_DIR, "eye1.py")
 VOSK_MODEL_DIR = os.path.join(BASE_DIR, "models", "vosk-model-small-en-us-0.15")
+WHISPER_MODEL_DIR = os.path.join(BASE_DIR, "models", "faster-whisper-base.en")
 
 # Create scripts directory if it doesn't exist
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
@@ -65,6 +66,7 @@ voice_service = OfflineVoiceService(
     VOSK_MODEL_DIR,
     handle_transcript,
     is_dictation_enabled=intent_router.is_dictation_enabled,
+    dictation_model_path=WHISPER_MODEL_DIR,
 )
 
 # Log directory structure
